@@ -4,7 +4,6 @@ using System.Linq;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 using Awaken.TG.Main.Crafting.HandCrafting.RecipeView;
 using Awaken.TG.Main.Crafting.Recipes;
 using Awaken.TG.Main.Localization;
@@ -14,21 +13,9 @@ using Awaken.TG.Main.UI.Popup;
 using Awaken.TG.Main.Utility;
 using Awaken.TG.Utility;
 using Awaken.Utility;
-using Cysharp.Threading.Tasks;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
-    internal static class SpawnContext
-    {
-        public static Transform Anchor;
-    }
-
-    internal static class PopupOwnership
-    {
-        public static bool IsOurs(VContextPopupUI v) =>
-            v?.Target?._owner is RecipeTabContents;
-    }
-
     // Replace the keyboard-cycle behaviour of VCRecipeSorting.NextSorting
     // with a context popup of just sort options (filter has its own popup
     // bound to FilterItems below).
@@ -57,7 +44,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] sort popup failed: {e.GetBaseException()}");
+                Plugin.Log.LogError($"[BetterSorting] crafting sort popup failed: {e.GetBaseException()}");
                 SpawnContext.Anchor = null;
                 return true;
             }
@@ -79,7 +66,7 @@ namespace CraftingFilter
                         try { grid.ChangeItemsComparer(captured); }
                         catch (Exception e)
                         {
-                            Plugin.Log.LogError($"[CraftingFilter] applying sort failed: {e.GetBaseException().Message}");
+                            Plugin.Log.LogError($"[BetterSorting] applying crafting sort failed: {e.GetBaseException().Message}");
                         }
                     },
                     enabled: true,
@@ -128,9 +115,9 @@ namespace CraftingFilter
                 var prompts = tabContents.Element<Prompts>();
                 if (prompts == null) return;
 
-                // If a previous CraftingFilter assembly already added a filter
-                // prompt to this Prompts element (eg. via hot-reload), discard
-                // it before adding a fresh one — prevents stacking duplicates.
+                // If a previous BetterSortingCrafting assembly already added a
+                // filter prompt to this Prompts element (eg. via hot-reload),
+                // discard it before adding a fresh one — prevents duplicates.
                 DiscardExistingFilterPrompts(prompts);
 
                 var filterPrompt = Prompt.Tap(
@@ -168,7 +155,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] filter prompt registration failed: {e.GetBaseException()}");
+                Plugin.Log.LogError($"[BetterSorting] filter prompt registration failed: {e.GetBaseException()}");
             }
         }
 
@@ -205,7 +192,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] alignment fix failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] alignment fix failed: {e.GetBaseException().Message}");
             }
         }
 
@@ -223,7 +210,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] discard existing prompts failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] discard existing prompts failed: {e.GetBaseException().Message}");
             }
         }
 
@@ -249,7 +236,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] refresh label failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] refresh label failed: {e.GetBaseException().Message}");
             }
         }
 
@@ -274,7 +261,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] filter popup failed: {e.GetBaseException()}");
+                Plugin.Log.LogError($"[BetterSorting] filter popup failed: {e.GetBaseException()}");
                 SpawnContext.Anchor = null;
             }
         }
@@ -342,7 +329,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] refresh failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] refresh failed: {e.GetBaseException().Message}");
             }
         }
     }
@@ -420,7 +407,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] filter postfix failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] filter postfix failed: {e.GetBaseException().Message}");
             }
         }
     }
@@ -432,194 +419,6 @@ namespace CraftingFilter
         {
             FilterState.ActiveGrid = __instance;
             FilterState.Reset();
-        }
-    }
-
-    // Restyle the popup — applies to both sort and filter popups since both
-    // are owned by RecipeTabContents.
-    [HarmonyPatch(typeof(VContextPopupUI), "Refresh")]
-    internal static class VContextPopupUI_Refresh_Patch
-    {
-        private static readonly Color BgColor = new Color(0.06f, 0.06f, 0.07f, 0.96f);
-        private static readonly Color RowNormal = new Color(1f, 1f, 1f, 0.10f);
-        private static readonly Color RowHover  = new Color(1f, 0.92f, 0.55f, 0.22f);
-        private static readonly Color Hidden    = new Color(0f, 0f, 0f, 0f);
-
-        static void Postfix(VContextPopupUI __instance)
-        {
-            try
-            {
-                if (!PopupOwnership.IsOurs(__instance)) return;
-                StyleRoot(__instance);
-                StyleOptions(__instance);
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[CraftingFilter] restyle failed: {e.GetBaseException().Message}");
-            }
-        }
-
-        private static void StyleRoot(VContextPopupUI v)
-        {
-            var t = v.actionsParent;
-            int safety = 6;
-            while (t != null && safety-- > 0)
-            {
-                var img = t.GetComponent<Image>();
-                if (img != null)
-                {
-                    img.color = BgColor;
-                    img.sprite = null;
-                }
-                if (t == v.transform) break;
-                t = t.parent;
-            }
-
-            if (v.verticalLayout != null)
-            {
-                v.verticalLayout.padding = new RectOffset(28, 28, 14, 14);
-                v.verticalLayout.spacing = 4f;
-                v.verticalLayout.childForceExpandWidth = true;
-                v.verticalLayout.childControlWidth = true;
-
-                var fitter = v.verticalLayout.GetComponent<ContentSizeFitter>();
-                if (fitter != null)
-                    fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            }
-        }
-
-        private static void StyleOptions(VContextPopupUI v)
-        {
-            if (v.actionsParent == null) return;
-
-            for (int i = 0; i < v.actionsParent.childCount; i++)
-            {
-                var child = v.actionsParent.GetChild(i);
-                if (child == null) continue;
-
-                foreach (var btn in child.GetComponentsInChildren<ARButton>(true))
-                {
-                    var wrapperImg = btn.GetComponent<Image>();
-                    if (wrapperImg != null)
-                    {
-                        btn.TargetGraphic = wrapperImg;
-                        wrapperImg.raycastTarget = true;
-                        wrapperImg.color = RowNormal;
-                    }
-
-                    btn.transitionType = (ARButton.TransitionType)0;
-
-                    if (btn.hoverGraphic != null)            btn.hoverGraphic.color = Hidden;
-                    if (btn.selectedGraphic != null)         btn.selectedGraphic.color = Hidden;
-                    if (btn.pressGraphic != null)            btn.pressGraphic.color = Hidden;
-                    if (btn.additiveSelectedGraphic != null) btn.additiveSelectedGraphic.color = Hidden;
-                    if (btn.disableGraphic != null)          btn.disableGraphic.color = Hidden;
-
-                    if (wrapperImg != null)
-                    {
-                        var hh = btn.GetComponent<HoverHighlight>() ?? btn.gameObject.AddComponent<HoverHighlight>();
-                        hh.Target = wrapperImg;
-                        hh.NormalColor = RowNormal;
-                        hh.HoverColor = RowHover;
-                    }
-                }
-
-                var tmp = child.GetComponentInChildren<TextMeshProUGUI>(true);
-                if (tmp != null)
-                {
-                    tmp.fontStyle |= FontStyles.SmallCaps;
-                    tmp.alignment = TextAlignmentOptions.MidlineLeft;
-                    tmp.raycastTarget = false;
-                }
-            }
-
-            ApplyWidthsDeferred(v).Forget();
-        }
-
-        private static async UniTaskVoid ApplyWidthsDeferred(VContextPopupUI v)
-        {
-            await UniTask.DelayFrame(1);
-            try
-            {
-                if (v == null || v.actionsParent == null) return;
-
-                for (int i = 0; i < v.actionsParent.childCount; i++)
-                {
-                    var child = v.actionsParent.GetChild(i);
-                    if (child == null) continue;
-                    var tmp = child.GetComponentInChildren<TextMeshProUGUI>(true);
-                    var le = child.GetComponent<LayoutElement>();
-                    if (tmp == null || le == null) continue;
-
-                    tmp.ForceMeshUpdate();
-                    float w = tmp.preferredWidth + 16f;
-                    le.preferredWidth = w;
-                    le.minWidth = w;
-                }
-
-                var layoutRoot = v.verticalLayout != null
-                    ? v.verticalLayout.transform as RectTransform
-                    : v.actionsParent as RectTransform;
-                if (layoutRoot != null)
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(layoutRoot);
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[CraftingFilter] deferred width apply failed: {e.GetBaseException().Message}");
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(VContextPopupUI), "OnInitialize")]
-    internal static class VContextPopupUI_OnInitialize_Patch
-    {
-        static void Postfix(VContextPopupUI __instance)
-        {
-            try
-            {
-                if (!PopupOwnership.IsOurs(__instance)) return;
-                if (SpawnContext.Anchor == null) return;
-                var vlRect = __instance.verticalLayout != null
-                    ? __instance.verticalLayout.transform as RectTransform
-                    : null;
-                if (vlRect != null)
-                    vlRect.pivot = new Vector2(0f, 0f);
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[CraftingFilter] pivot override failed: {e.GetBaseException().Message}");
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(VContextPopupUI), "SyncPosition")]
-    internal static class VContextPopupUI_SyncPosition_Patch
-    {
-        // Reused — GetWorldCorners writes into a caller-provided Vector3[4].
-        // Single-threaded UI code, so a static buffer is fine.
-        private static readonly Vector3[] _corners = new Vector3[4];
-
-        static void Postfix(VContextPopupUI __instance)
-        {
-            try
-            {
-                if (!PopupOwnership.IsOurs(__instance)) return;
-                var anchor = SpawnContext.Anchor;
-                if (anchor == null) return;
-
-                var anchorRect = anchor as RectTransform;
-                if (anchorRect == null) { SpawnContext.Anchor = null; return; }
-
-                anchorRect.GetWorldCorners(_corners);
-                __instance.transform.position = _corners[1];
-
-                SpawnContext.Anchor = null;
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[CraftingFilter] anchor positioning failed: {e.GetBaseException().Message}");
-                SpawnContext.Anchor = null;
-            }
         }
     }
 }

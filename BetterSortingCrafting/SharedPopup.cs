@@ -1,96 +1,47 @@
 using System;
-using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Awaken.TG.Main.Crafting.HandCrafting.RecipeView;
 using Awaken.TG.Main.Heroes.CharacterSheet.Items.Panel.List;
 using Awaken.TG.Main.UI.Components;
 using Awaken.TG.Main.UI.Popup;
 using Cysharp.Threading.Tasks;
 
-namespace SortDropdown
+namespace BetterSortingCrafting
 {
-    // Shared state for the moment between "user pressed sort" and "popup view
-    // is being initialised." Single-shot — consumed by the first matching
-    // popup, then nulled.
+    // Shared state for the moment between "user pressed sort/filter" and
+    // "popup view is being initialised." Single-shot — consumed by the first
+    // matching popup, then nulled.
     internal static class SpawnContext
     {
         public static Transform Anchor;
     }
 
+    // A popup is ours if its target's owner is one of the consumers we wired
+    // up: ItemsListUI (inventory/character sheet) or RecipeTabContents
+    // (crafting). Used to guard the styling/anchor patches so we don't
+    // restyle vanilla popups opened elsewhere in the game.
     internal static class PopupOwnership
     {
-        public static bool IsOurs(VContextPopupUI v) =>
-            v?.Target?._owner is ItemsListUI;
-    }
-
-    // Replaces the keyboard-cycle behaviour of VCItemSorting.NextSorting with a
-    // ContextPopupUI dropdown listing every available sort.
-    [HarmonyPatch(typeof(VCItemSorting), nameof(VCItemSorting.NextSorting))]
-    internal static class VCItemSorting_NextSorting_Patch
-    {
-        static bool Prefix(VCItemSorting __instance)
+        public static bool IsOurs(VContextPopupUI v)
         {
-            try
-            {
-                var sortings = __instance._sortings;
-                var target = __instance.Target;
-                if (sortings == null || sortings.Count <= 1 || target == null)
-                    return true;     // fall back to vanilla cycle
-
-                var current = __instance._currentSorting;
-                var options = new List<ContextPopupOption>(sortings.Count);
-                for (int i = 0; i < sortings.Count; i++)
-                {
-                    int idx = i;     // closure capture
-                    var sorting = sortings[i];
-                    var label = !string.IsNullOrEmpty(sorting.Name) ? sorting.Name : sorting.EnumName;
-                    var color = (i == current) ? new Color(1f, 0.85f, 0.4f) : Color.white;
-
-                    options.Add(new ContextPopupOption(
-                        text: label,
-                        color: color,
-                        callback: () =>
-                        {
-                            try
-                            {
-                                __instance._currentSorting = idx;
-                                __instance.RefreshSortingPrompt(sortings[idx]);
-                                __instance.Target.Sort(sortings[idx]);
-                            }
-                            catch (Exception e)
-                            {
-                                Plugin.Log.LogError($"[SortDropdown] applying sort failed: {e.GetBaseException().Message}");
-                            }
-                        },
-                        enabled: true,
-                        sortingOrder: i));
-                }
-
-                // Anchor the upcoming popup to the sort prompt instead of the cursor.
-                SpawnContext.Anchor = __instance.sortPrompt != null
-                    ? __instance.sortPrompt.transform
-                    : __instance.transform;
-
-                ContextPopupUI.CreatePopup(target, options);
-                return false;     // skip vanilla cycle
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[SortDropdown] popup open failed: {e.GetBaseException().Message}");
-                SpawnContext.Anchor = null;
-                return true;     // fall back to vanilla
-            }
+            var owner = v?.Target?._owner;
+            return owner is ItemsListUI || owner is RecipeTabContents;
         }
     }
 
-    // Restyle the context popup (only when ours) — dark bg, no per-row boxes,
-    // padded so the bg extends past the text.
+    // Restyle the popup background, padding, and per-row look. Same styling
+    // used for both inventory sort and crafting sort/filter popups — they all
+    // route through ContextPopupUI.
     [HarmonyPatch(typeof(VContextPopupUI), "Refresh")]
     internal static class VContextPopupUI_Refresh_Patch
     {
-        private static readonly Color BgColor = new Color(0.06f, 0.06f, 0.07f, 0.96f);
+        private static readonly Color BgColor   = new Color(0.06f, 0.06f, 0.07f, 0.96f);
+        private static readonly Color RowNormal = new Color(1f, 1f, 1f, 0.10f);     // subtle grey base
+        private static readonly Color RowHover  = new Color(1f, 0.92f, 0.55f, 0.22f); // warm hover tint
+        private static readonly Color Hidden    = new Color(0f, 0f, 0f, 0f);
 
         static void Postfix(VContextPopupUI __instance)
         {
@@ -102,7 +53,7 @@ namespace SortDropdown
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[SortDropdown] restyle failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] restyle failed: {e.GetBaseException().Message}");
             }
         }
 
@@ -139,13 +90,6 @@ namespace SortDropdown
             }
         }
 
-        // Per-row styling. Each row gets a subtle grey base so it reads as
-        // a button, plus a brighter gold tint on hover. We drive both
-        // directly via the wrapper Image and a custom HoverHighlight MB.
-        private static readonly Color RowNormal = new Color(1f, 1f, 1f, 0.10f);    // subtle grey
-        private static readonly Color RowHover = new Color(1f, 0.92f, 0.55f, 0.22f); // brighter warm tint
-        private static readonly Color Hidden = new Color(0f, 0f, 0f, 0f);
-
         private static void StyleOptions(VContextPopupUI v)
         {
             if (v.actionsParent == null) return;
@@ -162,7 +106,7 @@ namespace SortDropdown
                     {
                         btn.TargetGraphic = wrapperImg;
                         wrapperImg.raycastTarget = true;
-                        wrapperImg.color = RowNormal;     // direct: stable grey base
+                        wrapperImg.color = RowNormal;
                     }
 
                     // Disable ARButton's color transitions — they don't apply
@@ -170,14 +114,12 @@ namespace SortDropdown
                     // via HoverHighlight below.
                     btn.transitionType = (ARButton.TransitionType)0;
 
-                    if (btn.hoverGraphic != null) btn.hoverGraphic.color = Hidden;
-                    if (btn.selectedGraphic != null) btn.selectedGraphic.color = Hidden;
-                    if (btn.pressGraphic != null) btn.pressGraphic.color = Hidden;
+                    if (btn.hoverGraphic != null)            btn.hoverGraphic.color = Hidden;
+                    if (btn.selectedGraphic != null)         btn.selectedGraphic.color = Hidden;
+                    if (btn.pressGraphic != null)            btn.pressGraphic.color = Hidden;
                     if (btn.additiveSelectedGraphic != null) btn.additiveSelectedGraphic.color = Hidden;
-                    if (btn.disableGraphic != null) btn.disableGraphic.color = Hidden;
+                    if (btn.disableGraphic != null)          btn.disableGraphic.color = Hidden;
 
-                    // Attach our own pointer-enter/exit handler so hovered row
-                    // brightens. Idempotent — only adds if missing.
                     if (wrapperImg != null)
                     {
                         var hh = btn.GetComponent<HoverHighlight>() ?? btn.gameObject.AddComponent<HoverHighlight>();
@@ -232,7 +174,7 @@ namespace SortDropdown
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[SortDropdown] deferred width apply failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] deferred width apply failed: {e.GetBaseException().Message}");
             }
         }
     }
@@ -256,16 +198,20 @@ namespace SortDropdown
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[SortDropdown] pivot override failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] pivot override failed: {e.GetBaseException().Message}");
             }
         }
     }
 
     // Override position — vanilla puts popup at Input.mousePosition. We anchor
-    // to the sort prompt's top-left so it sits directly above the "SORT: X" line.
+    // to the prompt's top-left so it sits directly above the "SORT: X" line.
     [HarmonyPatch(typeof(VContextPopupUI), "SyncPosition")]
     internal static class VContextPopupUI_SyncPosition_Patch
     {
+        // Reused — GetWorldCorners writes into a caller-provided Vector3[4].
+        // Single-threaded UI code, so a static buffer is fine.
+        private static readonly Vector3[] _corners = new Vector3[4];
+
         static void Postfix(VContextPopupUI __instance)
         {
             try
@@ -277,17 +223,16 @@ namespace SortDropdown
                 var anchorRect = anchor as RectTransform;
                 if (anchorRect == null) { SpawnContext.Anchor = null; return; }
 
-                var corners = new Vector3[4];
-                anchorRect.GetWorldCorners(corners);
+                anchorRect.GetWorldCorners(_corners);
                 // 0=BL, 1=TL, 2=TR, 3=BR. Pivot is BL of popup, so position at TL of anchor
                 // makes popup sit immediately above the prompt, left-aligned.
-                __instance.transform.position = corners[1];
+                __instance.transform.position = _corners[1];
 
                 SpawnContext.Anchor = null;     // consume
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[SortDropdown] anchor positioning failed: {e.GetBaseException().Message}");
+                Plugin.Log.LogError($"[BetterSorting] anchor positioning failed: {e.GetBaseException().Message}");
                 SpawnContext.Anchor = null;
             }
         }

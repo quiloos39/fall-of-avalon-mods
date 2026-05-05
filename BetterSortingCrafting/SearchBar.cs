@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
     // A persistent TMP_InputField that floats above the sort prompt of the
     // active VCRecipeSorting. Built from scratch (no prefab) using a TMP font
@@ -29,7 +29,7 @@ namespace CraftingFilter
                 var font = FindAnyTmpFont();
                 if (font == null)
                 {
-                    Plugin.Log.LogWarning("[CraftingFilter] no TMP font found — search bar disabled");
+                    Plugin.Log.LogWarning("[BetterSorting] no TMP font found — search bar disabled");
                     return;
                 }
 
@@ -39,7 +39,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] SearchBar.Ensure failed: {e.GetBaseException()}");
+                Plugin.Log.LogError($"[BetterSorting] SearchBar.Ensure failed: {e.GetBaseException()}");
             }
         }
 
@@ -88,7 +88,7 @@ namespace CraftingFilter
         private static GameObject Build(Transform parent, UnityEngine.TextCore.Text.FontAsset font)
         {
             // Root container — sits above the sort prompt, anchored bottom-left.
-            var root = new GameObject("CraftingFilterSearch", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("BetterSortingSearch", typeof(RectTransform), typeof(Image));
             var rt = (RectTransform)root.transform;
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = new Vector2(0f, 1f);

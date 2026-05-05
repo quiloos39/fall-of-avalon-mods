@@ -3,7 +3,7 @@ using Awaken.TG.Main.Crafting.HandCrafting.RecipeView;
 using Awaken.TG.Main.Heroes.Items;
 using Awaken.TG.Main.Heroes.Items.Attachments;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
     // Live filter/sort selections, plus references to the active grid so the
     // popup callbacks can apply changes back to the game model.

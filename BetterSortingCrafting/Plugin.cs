@@ -2,13 +2,13 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     public class Plugin : BaseUnityPlugin
     {
-        public const string PluginGuid = "com.user.craftingfilter";
-        public const string PluginName = "CraftingFilter";
+        public const string PluginGuid = "com.user.bettersortingcrafting";
+        public const string PluginName = "BetterSortingCrafting";
         public const string PluginVersion = "0.1.0";
 
         internal static SafeLog Log = new SafeLog();
@@ -36,8 +36,8 @@ namespace CraftingFilter
     {
         private ManualLogSource _src;
         public void Bind(ManualLogSource src) => _src = src;
-        public void LogInfo(object o)    { try { _src?.LogInfo(o);    if (_src == null) UnityEngine.Debug.Log("[CraftingFilter] " + o); } catch { } }
-        public void LogWarning(object o) { try { _src?.LogWarning(o); if (_src == null) UnityEngine.Debug.LogWarning("[CraftingFilter] " + o); } catch { } }
-        public void LogError(object o)   { try { _src?.LogError(o);   if (_src == null) UnityEngine.Debug.LogError("[CraftingFilter] " + o); } catch { } }
+        public void LogInfo(object o)    { try { _src?.LogInfo(o);    if (_src == null) UnityEngine.Debug.Log("[BetterSortingCrafting] " + o); } catch { } }
+        public void LogWarning(object o) { try { _src?.LogWarning(o); if (_src == null) UnityEngine.Debug.LogWarning("[BetterSortingCrafting] " + o); } catch { } }
+        public void LogError(object o)   { try { _src?.LogError(o);   if (_src == null) UnityEngine.Debug.LogError("[BetterSortingCrafting] " + o); } catch { } }
     }
 }

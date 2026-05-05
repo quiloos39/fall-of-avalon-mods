@@ -3,7 +3,7 @@ using Awaken.TG.Main.Crafting.HandCrafting.RecipeView;
 using Awaken.TG.Main.Crafting.Recipes;
 using Awaken.TG.Main.Localization;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
     // Build new RecipeSorting instances for damage and armor by reusing the
     // game's own (publicized) private constructor. The instances are stored
@@ -26,18 +26,18 @@ namespace CraftingFilter
 
             try
             {
-                DamageDescending = New("CraftingFilterDamageDescending", DamageCmp,
+                DamageDescending = New("BetterSortingDamageDescending", DamageCmp,
                     reverse: false, label: "Damage ↓");
-                DamageAscending  = New("CraftingFilterDamageAscending",  DamageCmp,
+                DamageAscending  = New("BetterSortingDamageAscending",  DamageCmp,
                     reverse: true,  label: "Damage ↑");
-                ArmorDescending  = New("CraftingFilterArmorDescending",  ArmorCmp,
+                ArmorDescending  = New("BetterSortingArmorDescending",  ArmorCmp,
                     reverse: false, label: "Armor ↓");
-                ArmorAscending   = New("CraftingFilterArmorAscending",   ArmorCmp,
+                ArmorAscending   = New("BetterSortingArmorAscending",   ArmorCmp,
                     reverse: true,  label: "Armor ↑");
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError($"[CraftingFilter] custom sorting build failed: {e.GetBaseException()}");
+                Plugin.Log.LogError($"[BetterSorting] custom sorting build failed: {e.GetBaseException()}");
             }
         }
 
@@ -76,7 +76,7 @@ namespace CraftingFilter
             }
             catch (Exception e)
             {
-                Plugin.Log.LogWarning($"[CraftingFilter] could not set loc fallback: {e.Message}");
+                Plugin.Log.LogWarning($"[BetterSorting] could not set loc fallback: {e.Message}");
             }
 
             return sorting;

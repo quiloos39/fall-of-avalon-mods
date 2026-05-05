@@ -2,8 +2,12 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace CraftingFilter
+namespace BetterSortingCrafting
 {
+    // Lightweight pointer enter/exit handler that swaps a target Image's color
+    // between a normal and hover state. We use this instead of relying on
+    // ARButton's color transitions — those don't apply reliably when we change
+    // the colors at runtime (MarkToRefresh schedules but doesn't always commit).
     internal class HoverHighlight : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public Image Target;
