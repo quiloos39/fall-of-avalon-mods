@@ -11,7 +11,7 @@ namespace SpoilsOfTheSlain
     {
         public const string PluginGuid = "com.user.spoilsoftheslain";
         public const string PluginName = "Spoils of the Slain";
-        public const string PluginVersion = "0.9.0";
+        public const string PluginVersion = "0.10.0";
 
         internal static ManualLogSource Log;
         internal static SpoilsOfTheSlainConfig Cfg;
