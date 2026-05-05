@@ -7,6 +7,10 @@ dist/
 *.zip
 *.rar
 
+# Local secrets (.env holds NEXUSMODS_API_KEY)
+.env
+.env.local
+
 # Visual Studio / Rider
 .vs/
 .idea/

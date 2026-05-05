@@ -1,11 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Build a single mod, package it for Nexus, tag, push, and publish a GitHub release.
+  Build a single mod, package it for Nexus, tag, push, and upload directly to Nexus.
+
+  Loads NEXUSMODS_API_KEY from .env (or the process environment). The Nexus upload runs
+  locally — no GitHub Actions involvement — because game DLLs aren't redistributable to
+  cloud runners.
 
 .EXAMPLE
-  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2
-  ./release.ps1 -Mod SpoilsOfTheSlain -GameVersion 0.5.2 -NoPublish
+  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2                # full release
+  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2 -NoPublish     # local dry run
+  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2 -NoNexus       # push GH release, skip Nexus
 #>
 [CmdletBinding()]
 param(
@@ -22,9 +27,11 @@ param(
     # Skip creating the git tag.
     [switch]$NoTag,
 
-    # Skip the git push and gh release create. The GH Action only fires on a published release,
-    # so -NoPublish means a fully local dry run.
-    [switch]$NoPublish
+    # Skip git push, gh release create, and Nexus upload — fully local dry run.
+    [switch]$NoPublish,
+
+    # Skip just the Nexus upload (still pushes + creates the GitHub release).
+    [switch]$NoNexus
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,6 +40,138 @@ $RepoRoot = $PSScriptRoot
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Done($msg) { Write-Host "    $msg" -ForegroundColor Green }
 
+# ---------------------------------------------------------------------------
+# .env loader (existing process env vars take precedence — useful for CI/manual override)
+# ---------------------------------------------------------------------------
+function Import-DotEnv {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ([string]::IsNullOrEmpty($line) -or $line.StartsWith('#')) { return }
+        if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+            $k = $matches[1]
+            $v = $matches[2].Trim()
+            if (($v.StartsWith('"') -and $v.EndsWith('"')) -or
+                ($v.StartsWith("'") -and $v.EndsWith("'"))) {
+                $v = $v.Substring(1, $v.Length - 2)
+            }
+            if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($k))) {
+                [Environment]::SetEnvironmentVariable($k, $v, 'Process')
+            }
+        }
+    }
+}
+Import-DotEnv (Join-Path $RepoRoot '.env')
+
+# ---------------------------------------------------------------------------
+# Direct Nexus Upload API client.
+# Mirrors Nexus-Mods/upload-action: multipart init -> presigned PUT per part ->
+# complete (XML to S3) -> finalise -> poll until 'available' -> associate with file_group_id.
+# ---------------------------------------------------------------------------
+function Send-NexusUpload {
+    param(
+        [Parameter(Mandatory = $true)][string]$ApiKey,
+        [Parameter(Mandatory = $true)][string]$FileGroupId,
+        [Parameter(Mandatory = $true)][string]$ZipPath,
+        [Parameter(Mandatory = $true)][string]$Version,
+        [string]$DisplayName,
+        [string]$Description,
+        [bool]$ArchiveExisting = $true
+    )
+
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+    $apiBase = 'https://api.nexusmods.com/v3'
+    $authHeaders = @{ apikey = $ApiKey; 'User-Agent' = 'release.ps1 (quiloos39)' }
+
+    $size = (Get-Item $ZipPath).Length
+    $fileName = [System.IO.Path]::GetFileName($ZipPath)
+    if ([string]::IsNullOrEmpty($DisplayName)) { $DisplayName = $fileName }
+
+    # 1) Initialise multipart upload — returns presigned URLs to PUT each part to.
+    Write-Done "Requesting multipart upload ($size bytes)"
+    $initBody = @{ filename = $fileName; size_bytes = "$size" } | ConvertTo-Json -Compress
+    $init = Invoke-RestMethod -Uri "$apiBase/uploads/multipart" `
+        -Method Post -Headers $authHeaders `
+        -ContentType 'application/json' -Body $initBody
+    $uploadId    = $init.data.id
+    $partUrls    = @($init.data.part_presigned_urls)
+    $partSize    = [int]$init.data.part_size_bytes
+    $completeUrl = $init.data.complete_presigned_url
+    Write-Done "Upload id $uploadId, $($partUrls.Count) part(s) of $partSize bytes"
+
+    # 2) PUT each part to its presigned URL — these go straight to S3, NOT through the apikey-authed API.
+    $parts = @()
+    $stream = [System.IO.File]::OpenRead($ZipPath)
+    try {
+        for ($i = 0; $i -lt $partUrls.Count; $i++) {
+            $partNumber  = $i + 1
+            $offset      = [int64]$i * [int64]$partSize
+            $remaining   = $size - $offset
+            $bytesToRead = [int][Math]::Min([int64]$partSize, $remaining)
+
+            $buffer = New-Object byte[] $bytesToRead
+            $null = $stream.Seek($offset, 'Begin')
+            $null = $stream.Read($buffer, 0, $bytesToRead)
+
+            Write-Done "Part $partNumber/$($partUrls.Count) ($bytesToRead bytes)"
+            $resp = Invoke-WebRequest -Uri $partUrls[$i] -Method Put `
+                -Body $buffer -ContentType 'application/octet-stream' `
+                -UseBasicParsing
+            $etag = $resp.Headers['ETag']
+            if ($etag -is [array]) { $etag = $etag[0] }
+            $etag = $etag.Trim('"')
+            $parts += [pscustomobject]@{ PartNumber = $partNumber; ETag = $etag }
+        }
+    } finally { $stream.Dispose() }
+
+    # 3) Complete multipart — POST XML manifest of parts/ETags to the presigned complete URL.
+    $partsXml = ($parts | ForEach-Object {
+        "  <Part>`n    <PartNumber>$($_.PartNumber)</PartNumber>`n    <ETag>$($_.ETag)</ETag>`n  </Part>"
+    }) -join "`n"
+    $completeXml = "<CompleteMultipartUpload>`n$partsXml`n</CompleteMultipartUpload>"
+    Write-Done "Completing multipart upload"
+    $null = Invoke-WebRequest -Uri $completeUrl -Method Post `
+        -Body $completeXml -ContentType 'application/xml' -UseBasicParsing
+
+    # 4) Finalise on Nexus — moves the bytes into Nexus's processing pipeline.
+    Write-Done "Finalising"
+    $null = Invoke-RestMethod -Uri "$apiBase/uploads/$uploadId/finalise" `
+        -Method Post -Headers $authHeaders -ContentType 'application/json'
+
+    # 5) Poll until the upload is ready to associate with a mod.
+    $maxAttempts = 60; $attempt = 0
+    while ($true) {
+        $attempt++
+        Start-Sleep -Seconds 2
+        $state = Invoke-RestMethod -Uri "$apiBase/uploads/$uploadId" -Headers $authHeaders
+        Write-Done "State: $($state.data.state) (attempt $attempt/$maxAttempts)"
+        if ($state.data.state -eq 'available') { break }
+        if ($attempt -ge $maxAttempts) { throw "Nexus upload polling timed out for $uploadId" }
+    }
+
+    # 6) Associate with the mod's file_group_id — this is what makes the new version visible on the mod page.
+    $updateBody = @{
+        upload_id              = $uploadId
+        name                   = $DisplayName
+        version                = $Version
+        file_category          = 'main'
+        archive_existing_file  = $ArchiveExisting
+    }
+    if (-not [string]::IsNullOrEmpty($Description)) { $updateBody.description = $Description }
+    Write-Done "Associating with file_group_id $FileGroupId"
+    $update = Invoke-RestMethod -Uri "$apiBase/mod-file-update-groups/$FileGroupId/versions" `
+        -Method Post -Headers $authHeaders `
+        -ContentType 'application/json' -Body ($updateBody | ConvertTo-Json -Compress)
+    Write-Done "Nexus file uid: $($update.data.id)"
+    return $update.data.id
+}
+
+# ---------------------------------------------------------------------------
+# Validate inputs and look up Nexus metadata BEFORE doing 30 seconds of build work.
+# ---------------------------------------------------------------------------
 $ModDir   = Join-Path $RepoRoot $Mod
 $Csproj   = Join-Path $ModDir   "$Mod.csproj"
 $PluginCs = Join-Path $ModDir   'Plugin.cs'
@@ -41,10 +180,29 @@ if (-not (Test-Path $ModDir))   { throw "Mod folder not found: $ModDir" }
 if (-not (Test-Path $Csproj))   { throw "Missing csproj: $Csproj" }
 if (-not (Test-Path $PluginCs)) { throw "Missing Plugin.cs: $PluginCs" }
 
+$NexusEntry = $null
+if (Test-Path (Join-Path $RepoRoot 'nexus.json')) {
+    $nexusJson  = Get-Content (Join-Path $RepoRoot 'nexus.json') -Raw | ConvertFrom-Json
+    $NexusEntry = $nexusJson.$Mod
+}
+
+$WillUploadToNexus = -not $NoPublish -and -not $NoNexus
+if ($WillUploadToNexus) {
+    if (-not $NexusEntry -or -not $NexusEntry.file_group_id) {
+        throw "No nexus.json entry for '$Mod' — needs file_group_id"
+    }
+    $ApiKey = $env:NEXUSMODS_API_KEY
+    if ([string]::IsNullOrEmpty($ApiKey)) {
+        throw "NEXUSMODS_API_KEY not set. Create .env from .env.example or set the env var."
+    }
+}
+
 $Tag = "$Mod-v$GameVersion"
 Write-Step "Releasing $Tag"
 
-# 1) Bump PluginVersion in Plugin.cs (UTF-8 no BOM, preserves line endings of the original).
+# ---------------------------------------------------------------------------
+# 1) Bump PluginVersion in Plugin.cs (UTF-8 no BOM).
+# ---------------------------------------------------------------------------
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $pluginText = [System.IO.File]::ReadAllText($PluginCs)
 $newPlugin  = $pluginText -replace 'public const string PluginVersion = "[^"]+";', `
@@ -52,12 +210,10 @@ $newPlugin  = $pluginText -replace 'public const string PluginVersion = "[^"]+";
 if ($newPlugin -eq $pluginText) {
     throw "Could not find PluginVersion constant in $PluginCs"
 }
-if ($newPlugin -ne $pluginText) {
-    [System.IO.File]::WriteAllText($PluginCs, $newPlugin, $utf8NoBom)
-    Write-Done "Updated PluginVersion in Plugin.cs -> $GameVersion"
-}
+[System.IO.File]::WriteAllText($PluginCs, $newPlugin, $utf8NoBom)
+Write-Done "Updated PluginVersion in Plugin.cs -> $GameVersion"
 
-# 2) Bump <Version> in csproj if one exists (not all mods have it).
+# 2) Bump <Version> in csproj if present (not all mods declare one).
 $csprojText = [System.IO.File]::ReadAllText($Csproj)
 $newCsproj  = $csprojText -replace '<Version>[^<]+</Version>', "<Version>$GameVersion</Version>"
 if ($newCsproj -ne $csprojText) {
@@ -103,8 +259,7 @@ if (-not $NoCommit) {
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             Write-Done "Committed version bump"
         }
-    }
-    finally { Pop-Location }
+    } finally { Pop-Location }
 }
 
 # 7) Tag.
@@ -114,11 +269,10 @@ if (-not $NoTag) {
         & git tag $Tag
         if ($LASTEXITCODE -ne 0) { throw "git tag failed (does $Tag already exist?)" }
         Write-Done "Tagged $Tag"
-    }
-    finally { Pop-Location }
+    } finally { Pop-Location }
 }
 
-# 8) Push + GH release. The Nexus upload workflow fires on release: published.
+# 8) Push + GitHub release (archival).
 if (-not $NoPublish) {
     Push-Location $RepoRoot
     try {
@@ -127,15 +281,32 @@ if (-not $NoPublish) {
         Write-Done "Pushed branch + tag"
 
         & gh release create $Tag $Zip `
-            --title  "$Mod v$GameVersion" `
-            --notes  "Built against Tainted Grail: Fall of Avalon $GameVersion."
+            --title "$Mod v$GameVersion" `
+            --notes "Built against Tainted Grail: Fall of Avalon $GameVersion."
         if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
         Write-Done "Published GitHub Release $Tag"
+    } finally { Pop-Location }
+}
 
-        Write-Step "Nexus upload workflow will run automatically — watch:"
-        Write-Host "    https://github.com/quiloos39/fall-of-avalon-mods/actions" -ForegroundColor DarkGray
+# 9) Upload to Nexus.
+if ($WillUploadToNexus) {
+    Write-Step "Uploading to Nexus (file_group_id $($NexusEntry.file_group_id))"
+    $newFileUid = Send-NexusUpload `
+        -ApiKey       $ApiKey `
+        -FileGroupId  $NexusEntry.file_group_id `
+        -ZipPath      $Zip `
+        -Version      $GameVersion `
+        -DisplayName  "$Mod $GameVersion" `
+        -Description  "Built against Tainted Grail: Fall of Avalon $GameVersion." `
+        -ArchiveExisting $true
+    Write-Step "Done. New Nexus file uid: $newFileUid"
+    if ($NexusEntry.mod_id) {
+        Write-Host "    https://www.nexusmods.com/taintedgrailthefallofavalon/mods/$($NexusEntry.mod_id)" -ForegroundColor DarkGray
     }
-    finally { Pop-Location }
-} else {
+}
+elseif ($NoPublish) {
     Write-Step "Local build complete (no publish). Zip: $Zip"
+}
+else {
+    Write-Step "GitHub release published; skipped Nexus per -NoNexus. Zip: $Zip"
 }
