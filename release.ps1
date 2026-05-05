@@ -3,19 +3,29 @@
 .SYNOPSIS
   Build a single mod, package it for Nexus, tag, push, and upload directly to Nexus.
 
+  Two version dimensions:
+    -ModVersion   the mod's own semver, drives everything that needs uniqueness
+                  (PluginVersion, csproj <Version>, git tag, zip name).
+    -GameVersion  the Avalon version this build targets — surfaces alongside
+                  the mod version on Nexus and in the GitHub release.
+
   Loads NEXUSMODS_API_KEY from .env (or the process environment). The Nexus upload runs
   locally — no GitHub Actions involvement — because game DLLs aren't redistributable to
   cloud runners.
 
 .EXAMPLE
-  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2                # full release
-  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2 -NoPublish     # local dry run
-  ./release.ps1 -Mod AutoLoot -GameVersion 0.5.2 -NoNexus       # push GH release, skip Nexus
+  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2                # full release
+  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoPublish     # local dry run
+  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoNexus       # skip just Nexus
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Mod,
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
+    [string]$ModVersion,
 
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
@@ -39,6 +49,10 @@ $RepoRoot = $PSScriptRoot
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Done($msg) { Write-Host "    $msg" -ForegroundColor Green }
+
+# Combined human-readable string used wherever both versions should be visible at once
+# (Nexus version field, GitHub release title, file display name).
+$NexusVersion = "$ModVersion (Avalon $GameVersion)"
 
 # ---------------------------------------------------------------------------
 # .env loader (existing process env vars take precedence — useful for CI/manual override)
@@ -170,7 +184,7 @@ function Send-NexusUpload {
 }
 
 # ---------------------------------------------------------------------------
-# Validate inputs and look up Nexus metadata BEFORE doing 30 seconds of build work.
+# Validate inputs and look up Nexus metadata BEFORE doing build work.
 # ---------------------------------------------------------------------------
 $ModDir   = Join-Path $RepoRoot $Mod
 $Csproj   = Join-Path $ModDir   "$Mod.csproj"
@@ -197,8 +211,8 @@ if ($WillUploadToNexus) {
     }
 }
 
-$Tag = "$Mod-v$GameVersion"
-Write-Step "Releasing $Tag"
+$Tag = "$Mod-v$ModVersion"
+Write-Step "Releasing $Tag (Avalon $GameVersion)"
 
 # ---------------------------------------------------------------------------
 # 1) Bump PluginVersion in Plugin.cs (UTF-8 no BOM).
@@ -206,19 +220,19 @@ Write-Step "Releasing $Tag"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $pluginText = [System.IO.File]::ReadAllText($PluginCs)
 $newPlugin  = $pluginText -replace 'public const string PluginVersion = "[^"]+";', `
-                                   ('public const string PluginVersion = "' + $GameVersion + '";')
+                                   ('public const string PluginVersion = "' + $ModVersion + '";')
 if ($newPlugin -eq $pluginText) {
     throw "Could not find PluginVersion constant in $PluginCs"
 }
 [System.IO.File]::WriteAllText($PluginCs, $newPlugin, $utf8NoBom)
-Write-Done "Updated PluginVersion in Plugin.cs -> $GameVersion"
+Write-Done "Updated PluginVersion in Plugin.cs -> $ModVersion"
 
 # 2) Bump <Version> in csproj if present (not all mods declare one).
 $csprojText = [System.IO.File]::ReadAllText($Csproj)
-$newCsproj  = $csprojText -replace '<Version>[^<]+</Version>', "<Version>$GameVersion</Version>"
+$newCsproj  = $csprojText -replace '<Version>[^<]+</Version>', "<Version>$ModVersion</Version>"
 if ($newCsproj -ne $csprojText) {
     [System.IO.File]::WriteAllText($Csproj, $newCsproj, $utf8NoBom)
-    Write-Done "Updated <Version> in $Mod.csproj -> $GameVersion"
+    Write-Done "Updated <Version> in $Mod.csproj -> $ModVersion"
 }
 
 # 3) Build Release.
@@ -231,7 +245,7 @@ if (-not (Test-Path $Dll)) { throw "Built DLL not found: $Dll" }
 
 # 4) Stage zip layout: BepInEx/plugins/<Mod>.dll
 $DistDir = Join-Path $RepoRoot 'dist'
-$Stage   = Join-Path $DistDir  "$Mod-v$GameVersion"
+$Stage   = Join-Path $DistDir  "$Mod-v$ModVersion"
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 $PluginsDir = Join-Path $Stage 'BepInEx/plugins'
 New-Item -ItemType Directory -Path $PluginsDir -Force | Out-Null
@@ -239,7 +253,7 @@ Copy-Item $Dll $PluginsDir
 Write-Done "Staged BepInEx/plugins/$Mod.dll"
 
 # 5) Zip.
-$Zip = Join-Path $DistDir "$Mod-v$GameVersion.zip"
+$Zip = Join-Path $DistDir "$Mod-v$ModVersion.zip"
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
 Compress-Archive -Path (Join-Path $Stage 'BepInEx') -DestinationPath $Zip
 Write-Done "Created $Zip"
@@ -253,9 +267,9 @@ if (-not $NoCommit) {
 
         & git diff --cached --quiet
         if ($LASTEXITCODE -eq 0) {
-            Write-Done "No version bump to commit (already at $GameVersion)"
+            Write-Done "No version bump to commit (already at $ModVersion)"
         } else {
-            & git commit -m "Release $Mod v$GameVersion"
+            & git commit -m "Release $Mod v$ModVersion (Avalon $GameVersion)"
             if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
             Write-Done "Committed version bump"
         }
@@ -281,7 +295,7 @@ if (-not $NoPublish) {
         Write-Done "Pushed branch + tag"
 
         & gh release create $Tag $Zip `
-            --title "$Mod v$GameVersion" `
+            --title "$Mod v$NexusVersion" `
             --notes "Built against Tainted Grail: Fall of Avalon $GameVersion."
         if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
         Write-Done "Published GitHub Release $Tag"
@@ -295,8 +309,8 @@ if ($WillUploadToNexus) {
         -ApiKey       $ApiKey `
         -FileGroupId  $NexusEntry.file_group_id `
         -ZipPath      $Zip `
-        -Version      $GameVersion `
-        -DisplayName  "$Mod $GameVersion" `
+        -Version      $NexusVersion `
+        -DisplayName  "$Mod $NexusVersion" `
         -Description  "Built against Tainted Grail: Fall of Avalon $GameVersion." `
         -ArchiveExisting $true
     Write-Step "Done. New Nexus file uid: $newFileUid"

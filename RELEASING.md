@@ -19,18 +19,23 @@ proprietary game DLLs that can't be vendored or used in cloud runners).
 From the repo root:
 
 ```powershell
-./release.ps1 -Mod AutoLoot -GameVersion 0.5.2
+./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2
 ```
 
 The script:
-1. Writes `0.5.2` into `PluginVersion` in `<Mod>/Plugin.cs` and `<Version>` in `<Mod>/<Mod>.csproj`.
+1. Writes `1.0.1` (the **mod** version) into `PluginVersion` in `<Mod>/Plugin.cs`
+   and `<Version>` in `<Mod>/<Mod>.csproj`.
 2. `dotnet build -c Release` for that one mod.
-3. Stages `BepInEx/plugins/<Mod>.dll` and zips to `dist/<Mod>-v<gameversion>.zip`.
-4. Commits the version bump, tags `<Mod>-v<gameversion>`, pushes branch + tag.
-5. `gh release create` — publishes a GitHub Release with the zip attached (archival).
+3. Stages `BepInEx/plugins/<Mod>.dll` and zips to `dist/<Mod>-v<modversion>.zip`.
+4. Commits the version bump as `Release <Mod> v<modversion> (Avalon <gameversion>)`,
+   tags `<Mod>-v<modversion>`, pushes branch + tag.
+5. `gh release create` — publishes a GitHub Release titled
+   `<Mod> v<modversion> (Avalon <gameversion>)` with the zip attached (archival).
 6. **Calls Nexus directly** via the v3 Upload API:
    - Initialises a multipart upload, PUTs each part to its presigned URL,
      completes, finalises, polls until `available`, associates with `file_group_id`.
+   - The Nexus file's **version** field is set to `<modversion> (Avalon <gameversion>)`
+     so users see both at a glance in the Files column.
    - Archives the previous file on that mod page.
 
 ### Flags
@@ -46,15 +51,32 @@ The script:
 
 ## Versioning
 
-Mod version = current Avalon game version (e.g. `0.5.2`). The same string is written into:
-- `PluginVersion` in `Plugin.cs` (visible to BepInEx)
-- `<Version>` in the `.csproj`
-- The git tag (`<Mod>-v0.5.2`)
-- The GitHub Release title and the Nexus file version
+Two dimensions, both required:
 
-If you ship a second build against the same game version, append a fourth part:
-`./release.ps1 -Mod AutoLoot -GameVersion 0.5.2.1`. `System.Version` (BepInEx) accepts
-a 4-part form and Nexus version strings are arbitrary.
+- **`-ModVersion`** — the mod's own semver. Bumps when *the mod* changes.
+  Used wherever uniqueness matters: `PluginVersion`, `<Version>`, git tag,
+  zip filename. Must be a clean `System.Version` string (3 or 4 dotted parts)
+  so BepInEx parses it.
+- **`-GameVersion`** — the Avalon version this build was made against.
+  Bumps when *the game* updates. Pure metadata — no parsing constraints.
+
+Where each appears:
+
+| Location                | Format                                  |
+|-------------------------|-----------------------------------------|
+| `PluginVersion`         | `1.0.1`                                 |
+| `<Version>` in csproj   | `1.0.1`                                 |
+| Git tag                 | `AutoLoot-v1.0.1`                       |
+| Zip filename            | `AutoLoot-v1.0.1.zip`                   |
+| Commit message          | `Release AutoLoot v1.0.1 (Avalon 0.5.2)`|
+| GitHub release title    | `AutoLoot v1.0.1 (Avalon 0.5.2)`        |
+| Nexus file `version`    | `1.0.1 (Avalon 0.5.2)`                  |
+| Nexus file display name | `AutoLoot 1.0.1 (Avalon 0.5.2)`         |
+
+Bump rules:
+- Mod patch fix → bump `-ModVersion` (`1.0.1` → `1.0.2`), keep `-GameVersion`.
+- Game patch but mod still works → bump `-ModVersion` (signal a fresh build to users) and `-GameVersion`.
+- Mod feature → bump `-ModVersion` minor or major.
 
 ## Adding a new mod
 
@@ -64,14 +86,14 @@ a 4-part form and Nexus version strings are arbitrary.
    ```json
    "MyNewMod": { "mod_id": 999, "file_group_id": "1234567" }
    ```
-4. Done — `./release.ps1 -Mod MyNewMod -GameVersion ...` works.
+4. Done — `./release.ps1 -Mod MyNewMod -ModVersion 0.1.0 -GameVersion 0.5.2` works.
 
 ## Recovering from a failed Nexus upload
 
 If steps 1–5 succeeded but the Nexus call failed (network blip, rate limit), re-run:
 
 ```powershell
-./release.ps1 -Mod AutoLoot -GameVersion 0.5.2 -NoCommit -NoTag
+./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoCommit -NoTag
 ```
 
 The build/zip is rebuilt (cheap), commit/tag are skipped (already in place),
