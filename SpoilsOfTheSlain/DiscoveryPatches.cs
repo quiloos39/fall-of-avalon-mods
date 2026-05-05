@@ -31,7 +31,7 @@ namespace SpoilsOfTheSlain
                 // doesn't need to revisit the forge "after the rebuild" — recipe is there
                 // the moment they next open the station.
                 bool isNew = (heroItems.KnownItems?.Count ?? 0) > before;
-                RecipeIssuer.Issue(template);     // idempotent, no-op for already-known items
+                RecipeIssuer.Issue(template, announce: true);     // idempotent, no-op for already-known items
 
                 if (isNew && Plugin.Cfg.Verbose.Value)
                     Plugin.Log.LogInfo($"[Discovery] +{template.ItemName ?? template.name} via {source}");

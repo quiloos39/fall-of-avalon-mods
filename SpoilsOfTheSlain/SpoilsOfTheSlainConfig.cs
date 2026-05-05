@@ -27,6 +27,9 @@ namespace SpoilsOfTheSlain
         public ConfigEntry<bool> ExcludeUnique { get; }
         public ConfigEntry<bool> EquippablesOnlyForForge { get; }
 
+        // Notifications
+        public ConfigEntry<bool> NotifyOnDiscovery { get; }
+
         // Debug
         public ConfigEntry<bool> Verbose { get; }
         public ConfigEntry<bool> LogDiscoveryGrowth { get; }
@@ -89,6 +92,12 @@ namespace SpoilsOfTheSlain
             EquippablesOnlyForForge = cfg.Bind(
                 "5. Filters", "EquippablesOnlyForForge", true,
                 "If true, the forge only shows weapons/armor/jewelry — not crafting materials, books, etc. Off would let you craft any known item at the forge.");
+
+            NotifyOnDiscovery = cfg.Bind(
+                "6. Notifications", "NotifyOnDiscovery", true,
+                "Pop the vanilla recipe-learned notification (icon + name in the middle screen) every " +
+                "time we issue a new recipe from a discovered weapon/armor/potion/dish. " +
+                "Startup backfill is silent — only mid-session discoveries (drops, containers, kills) trigger this.");
 
             Verbose = cfg.Bind(
                 "9. Debug", "Verbose", false,

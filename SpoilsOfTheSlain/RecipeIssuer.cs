@@ -1,5 +1,6 @@
 using System;
 using Awaken.TG.Main.Heroes.Items;
+using Awaken.TG.Main.Crafting.Recipes;
 
 namespace SpoilsOfTheSlain
 {
@@ -14,7 +15,10 @@ namespace SpoilsOfTheSlain
         public static int IssuedAlchemy;
         public static int IssuedCooking;
 
-        public static void Issue(ItemTemplate outcome)
+        // announce=true pushes the vanilla recipe-learned notification when a NEW recipe is
+        // added. Startup backfill leaves it false to avoid spamming hundreds of toasts on
+        // game load; mid-session discovery / kill paths set it true.
+        public static void Issue(ItemTemplate outcome, bool announce = false)
         {
             if (outcome == null) return;
             string guid = null;
@@ -45,6 +49,16 @@ namespace SpoilsOfTheSlain
                 if (s == RecipeFactory.Station.Forge) IssuedForge++;
                 else if (s == RecipeFactory.Station.Alchemy) IssuedAlchemy++;
                 else IssuedCooking++;
+
+                if (announce && Plugin.Cfg.NotifyOnDiscovery.Value)
+                {
+                    try { ItemUtils.AnnounceGettingRecipe(recipe); }
+                    catch (Exception e)
+                    {
+                        if (Plugin.Cfg.Verbose.Value)
+                            Plugin.Log.LogWarning($"[Issue] Notify failed for {outcome.ItemName ?? outcome.name}: {e.GetBaseException().Message}");
+                    }
+                }
             }
         }
 

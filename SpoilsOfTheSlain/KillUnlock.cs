@@ -59,7 +59,7 @@ namespace SpoilsOfTheSlain
                 int before = known.Count;
                 heroItems.AddToKnownItems(item);
                 if (known.Count > before) unlocked++;
-                RecipeIssuer.Issue(item);
+                RecipeIssuer.Issue(item, announce: true);
             }
 
             if (unlocked > 0 && Plugin.Cfg.LogDiscoveryGrowth.Value)
