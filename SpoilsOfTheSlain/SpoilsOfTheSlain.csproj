@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>SpoilsOfTheSlain</AssemblyName>
+    <RootNamespace>SpoilsOfTheSlain</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <DebugType>portable</DebugType>
+    <Version>0.1.0</Version>
+    <NoWarn>CS0436;CS1701;CS1702;CS0618</NoWarn>
+
+    <GameRoot>C:\Program Files (x86)\Steam\steamapps\common\Tainted Grail FoA</GameRoot>
+    <GameManaged>$(GameRoot)\Fall of Avalon_Data\Managed</GameManaged>
+    <GameBepInExCore>$(GameRoot)\BepInEx\core</GameBepInExCore>
+    <PluginsTarget>$(GameRoot)\BepInEx\plugins</PluginsTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Publicizer" Version="2.2.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Publicize Include="TG.Main" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="TG.Main">
+      <HintPath>$(GameManaged)\TG.Main.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Awaken.Utility">
+      <HintPath>$(GameManaged)\Awaken.Utility.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManaged)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="BepInEx">
+      <HintPath>$(GameBepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameBepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(PluginsTarget)')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginsTarget)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copied $(TargetFileName) to $(PluginsTarget)" />
+  </Target>
+
+</Project>
