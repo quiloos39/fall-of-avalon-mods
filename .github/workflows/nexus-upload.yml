@@ -1,0 +1,63 @@
+name: Upload to Nexus
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MOD="${TAG%-v*}"
+          VERSION="${TAG##*-v}"
+          if [ -z "$MOD" ] || [ -z "$VERSION" ] || [ "$MOD" = "$TAG" ]; then
+            echo "::error::Cannot parse tag '$TAG' (expected '<Mod>-v<version>')"
+            exit 1
+          fi
+          echo "mod=$MOD"          >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
+          echo "Parsed mod=$MOD version=$VERSION"
+
+      - name: Lookup file_group_id from nexus.json
+        id: lookup
+        run: |
+          MOD="${{ steps.parse.outputs.mod }}"
+          FILE_GROUP_ID=$(jq -r --arg m "$MOD" '.[$m].file_group_id // empty' nexus.json)
+          if [ -z "$FILE_GROUP_ID" ]; then
+            echo "::error::No nexus.json entry for mod '$MOD'"
+            exit 1
+          fi
+          echo "file_group_id=$FILE_GROUP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${GITHUB_REF_NAME}" -p '*.zip' -D .
+
+      - name: Resolve zip filename
+        id: zip
+        run: |
+          ZIP=$(ls -1 *.zip | head -n1)
+          if [ -z "$ZIP" ]; then
+            echo "::error::No .zip asset found on release ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "name=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.5
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_group_id: ${{ steps.lookup.outputs.file_group_id }}
+          filename: ${{ steps.zip.outputs.name }}
+          version: ${{ steps.parse.outputs.version }}
+          archive_existing_file: true

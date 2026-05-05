@@ -1,6 +1,11 @@
 # Build output
 bin/
 obj/
+dist/
+
+# Release artefacts
+*.zip
+*.rar
 
 # Visual Studio / Rider
 .vs/
