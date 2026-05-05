@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Build a single mod, package it for Nexus, tag, push, and upload directly to Nexus.
