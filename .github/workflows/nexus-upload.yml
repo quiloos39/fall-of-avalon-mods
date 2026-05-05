@@ -10,6 +10,7 @@ permissions:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    environment: nexus
     steps:
       - uses: actions/checkout@v4
 
