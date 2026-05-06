@@ -1,23 +1,21 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Build a single mod, package it for Nexus, commit + tag the version bump,
-  push to origin, and upload directly to Nexus.
+  Build a single mod, package it for Nexus, and upload directly to Nexus.
 
   Two version dimensions:
     -ModVersion   the mod's own semver, drives everything that needs uniqueness
-                  (PluginVersion, csproj <Version>, git tag, zip name).
+                  (PluginVersion, csproj <Version>, zip name).
     -GameVersion  the Avalon version this build targets — surfaces alongside
-                  the mod version on Nexus and in the GitHub release.
+                  the mod version on Nexus.
 
   Loads NEXUSMODS_API_KEY from .env (or the process environment). The Nexus upload runs
   locally — no GitHub Actions involvement — because game DLLs aren't redistributable to
   cloud runners.
 
 .EXAMPLE
-  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2                # full release
-  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoPublish     # local dry run
-  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoNexus       # skip just Nexus
+  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2            # full release
+  ./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2 -NoNexus   # local build only
 #>
 [CmdletBinding()]
 param(
@@ -32,19 +30,7 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
     [string]$GameVersion,
 
-    # Skip the local git commit (PluginVersion / csproj edits stay unstaged).
-    [switch]$NoCommit,
-
-    # Skip creating the git tag.
-    [switch]$NoTag,
-
-    # Skip git push and Nexus upload — fully local dry run.
-    [switch]$NoPublish,
-
-    # Skip just the git push (still uploads to Nexus).
-    [switch]$NoPush,
-
-    # Skip just the Nexus upload (still pushes the commit + tag).
+    # Skip the Nexus upload — local build only.
     [switch]$NoNexus
 )
 
@@ -208,7 +194,7 @@ if (Test-Path (Join-Path $RepoRoot 'nexus.json')) {
     $NexusEntry = $nexusJson.$Mod
 }
 
-$WillUploadToNexus = -not $NoPublish -and -not $NoNexus
+$WillUploadToNexus = -not $NoNexus
 if ($WillUploadToNexus) {
     if (-not $NexusEntry -or -not $NexusEntry.file_group_id) {
         throw "No nexus.json entry for '$Mod' — needs file_group_id"
@@ -219,8 +205,7 @@ if ($WillUploadToNexus) {
     }
 }
 
-$Tag = "$Mod-v$ModVersion"
-Write-Step "Releasing $Tag (Avalon $GameVersion)"
+Write-Step "Releasing $Mod v$ModVersion (Avalon $GameVersion)"
 
 # ---------------------------------------------------------------------------
 # 1) Bump PluginVersion in Plugin.cs (UTF-8 no BOM).
@@ -270,45 +255,7 @@ if (Test-Path $Zip) { Remove-Item $Zip -Force }
 Compress-Archive -Path (Join-Path $Stage 'BepInEx') -DestinationPath $Zip
 Write-Done "Created $Zip"
 
-# 6) Commit (only the two files we touched).
-if (-not $NoCommit) {
-    Push-Location $RepoRoot
-    try {
-        & git add -- "$Mod/Plugin.cs" "$Mod/$Mod.csproj"
-        if ($LASTEXITCODE -ne 0) { throw "git add failed" }
-
-        & git diff --cached --quiet
-        if ($LASTEXITCODE -eq 0) {
-            Write-Done "No version bump to commit (already at $ModVersion)"
-        } else {
-            & git commit -m "Release $Mod v$ModVersion (Avalon $GameVersion)"
-            if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
-            Write-Done "Committed version bump"
-        }
-    } finally { Pop-Location }
-}
-
-# 7) Tag.
-if (-not $NoTag) {
-    Push-Location $RepoRoot
-    try {
-        & git tag $Tag
-        if ($LASTEXITCODE -ne 0) { throw "git tag failed (does $Tag already exist?)" }
-        Write-Done "Tagged $Tag"
-    } finally { Pop-Location }
-}
-
-# 8) Push commit + tag to keep origin in sync.
-if (-not $NoPublish -and -not $NoPush) {
-    Push-Location $RepoRoot
-    try {
-        & git push origin HEAD --tags
-        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
-        Write-Done "Pushed branch + tag"
-    } finally { Pop-Location }
-}
-
-# 9) Upload to Nexus.
+# 6) Upload to Nexus.
 if ($WillUploadToNexus) {
     Write-Step "Uploading to Nexus (file_group_id $($NexusEntry.file_group_id))"
     $newFileUid = Send-NexusUpload `
@@ -324,9 +271,6 @@ if ($WillUploadToNexus) {
         Write-Host "    https://www.nexusmods.com/taintedgrailthefallofavalon/mods/$($NexusEntry.mod_id)" -ForegroundColor DarkGray
     }
 }
-elseif ($NoPublish) {
-    Write-Step "Local build complete (no publish). Zip: $Zip"
-}
 else {
-    Write-Step "Pushed; skipped Nexus per -NoNexus. Zip: $Zip"
+    Write-Step "Local build complete (no publish). Zip: $Zip"
 }
