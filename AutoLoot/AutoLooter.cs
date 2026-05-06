@@ -151,6 +151,16 @@ namespace AutoLoot
                     var dx = loc.Coords - heroPos;
                     if (dx.sqrMagnitude > radiusSq) continue;
 
+                    if (Plugin.Cfg.IgnoreLocked.Value)
+                    {
+                        var lockAction = loc.TryGetElement<LockAction>();
+                        if (lockAction != null && lockAction.Locked)
+                        {
+                            if (verbose) Plugin.Log.LogInfo($"[AutoLoot] skip loc '{loc.DisplayName}' — locked");
+                            continue;
+                        }
+                    }
+
                     var pick = loc.TryGetElement<PickItemAction>();
                     if (pick != null)
                     {

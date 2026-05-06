@@ -21,6 +21,7 @@ namespace AutoLoot
         public ConfigEntry<bool> IgnoreQuestItems { get; }
         public ConfigEntry<bool> IgnoreIllegal { get; }
         public ConfigEntry<bool> IgnoreHidden { get; }
+        public ConfigEntry<bool> IgnoreLocked { get; }
 
         public ConfigEntry<bool> ShowToggleNotification { get; }
 
@@ -40,7 +41,7 @@ namespace AutoLoot
                 "Master switch for the AutoLoot mod.");
 
             EnabledByDefault = cfg.Bind(
-                "1. General", "EnabledByDefault", false,
+                "1. General", "EnabledByDefault", true,
                 "If true, auto-collect starts active when the game loads. Otherwise it must be toggled on with the hotkey.");
 
             ToggleHotkey = cfg.Bind(
@@ -100,6 +101,10 @@ namespace AutoLoot
             IgnoreHidden = cfg.Bind(
                 "3. Filter", "IgnoreHidden", true,
                 "If true, items hidden from the UI (internal/script-only) are skipped.");
+
+            IgnoreLocked = cfg.Bind(
+                "3. Filter", "IgnoreLocked", true,
+                "If true, locked containers (chests, doors, drawers) are skipped — both their PickItemAction and their contents. Set to false to bypass locks entirely and auto-loot anything in range.");
 
             ShowToggleNotification = cfg.Bind(
                 "4. UI", "ShowToggleNotification", true,
