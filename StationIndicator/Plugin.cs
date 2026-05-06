@@ -10,7 +10,7 @@ namespace StationIndicator
     {
         public const string PluginGuid = "com.user.stationindicator";
         public const string PluginName = "StationIndicator";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
 
         internal static ManualLogSource Log;
         internal static StationIndicatorConfig Cfg;
