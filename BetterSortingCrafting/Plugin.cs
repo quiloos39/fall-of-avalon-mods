@@ -9,7 +9,7 @@ namespace BetterSortingCrafting
     {
         public const string PluginGuid = "com.user.bettersortingcrafting";
         public const string PluginName = "BetterSortingCrafting";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
 
         internal static SafeLog Log = new SafeLog();
         private Harmony _harmony;

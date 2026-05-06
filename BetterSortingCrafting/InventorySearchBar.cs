@@ -10,10 +10,11 @@ using UnityEngine.UI;
 
 namespace BetterSortingCrafting
 {
-    // Search bar for the bag / inventory panel. Same UX as the crafting one
-    // (identical visual, custom blinking caret) but its onValueChanged hooks
-    // ItemsListUI.OverrideFilter — the same path BetterUI uses — to filter
-    // bag items by Item.DisplayName.
+    // Search bar for any VItemsDefaultUI host (bag, shop, stash, gems,
+    // transmog, equipment-choose). Same UX as the crafting bar (identical
+    // visual, custom blinking caret). Writes the search text into
+    // ItemFilterState so it composes with the category filter the popup
+    // installs — both feed a single OverrideFilter on ItemsListUI.
     internal static class InventorySearchBar
     {
         private static GameObject _root;
@@ -121,7 +122,7 @@ namespace BetterSortingCrafting
             areaRt.offsetMin = new Vector2(8f, 4f);
             areaRt.offsetMax = new Vector2(-8f, -4f);
 
-            var placeholder = MakeTmp("Placeholder", areaRt, font, "Search bag...", 14, italic: true,
+            var placeholder = MakeTmp("Placeholder", areaRt, font, "Search items...", 14, italic: true,
                 color: new Color(1f, 1f, 1f, 0.45f));
             var textComp = MakeTmp("Text", areaRt, font, string.Empty, 14, italic: false,
                 color: Color.white);
@@ -192,11 +193,9 @@ namespace BetterSortingCrafting
             return tmp;
         }
 
-        private static string _searchText = string.Empty;
-
         private static void OnSearchChanged(string s)
         {
-            _searchText = s ?? string.Empty;
+            ItemFilterState.SearchText = s ?? string.Empty;
             // Debouncer (added to root) coalesces fast typing into one filter
             // refresh per ~180ms — same path the crafting bar uses, but the
             // applied action is ApplyFilter rather than RefreshGrid.
@@ -206,15 +205,15 @@ namespace BetterSortingCrafting
 
         private static void OnSearchSubmit(string s)
         {
-            _searchText = s ?? string.Empty;
+            ItemFilterState.SearchText = s ?? string.Empty;
             if (_debouncer != null) _debouncer.FireNowAction(ApplyFilter);
             else ApplyFilter();
         }
 
-        // Apply the current search text as an OverrideFilter on the bag's
-        // ItemsListUI. Empty text clears the override; non-empty installs a
-        // case-insensitive substring match on Item.DisplayName.
-        private static void ApplyFilter()
+        // Resolve the active list and delegate filtering to ItemFilterState
+        // so the search text composes with any category filter the popup
+        // installed.
+        public static void ApplyFilter()
         {
             try
             {
@@ -222,20 +221,7 @@ namespace BetterSortingCrafting
                 var itemsUI = ((View)_attachedTo).GenericTarget as ItemsUI;
                 var listUI = itemsUI?.ItemsListUI;
                 if (listUI == null) return;
-
-                if (string.IsNullOrWhiteSpace(_searchText))
-                {
-                    listUI.OverrideFilter(null);
-                }
-                else
-                {
-                    var captured = _searchText;
-                    var tab = new ItemsTabType("BetterSorting_BagSearch",
-                        (Item item) => MatchesSearch(item, captured),
-                        "", null, null);
-                    listUI.OverrideFilter(tab);
-                }
-                listUI.Refresh();
+                ItemFilterState.Apply(listUI);
             }
             catch (Exception e)
             {
@@ -243,11 +229,20 @@ namespace BetterSortingCrafting
             }
         }
 
-        private static bool MatchesSearch(Item item, string searchText)
+        // Sync the search input's visible text from ItemFilterState — used
+        // when the filter popup resets state (e.g. on a fresh OnAttach).
+        public static void SyncFromState()
         {
-            if (item == null || string.IsNullOrEmpty(searchText)) return true;
-            var name = item.DisplayName ?? string.Empty;
-            return name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+            try
+            {
+                if (_input == null) return;
+                if (_input.text != ItemFilterState.SearchText)
+                    _input.SetTextWithoutNotify(ItemFilterState.SearchText ?? string.Empty);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"[BetterSorting] bag-search sync failed: {e.GetBaseException().Message}");
+            }
         }
     }
 
