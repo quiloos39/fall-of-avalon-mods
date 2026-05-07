@@ -34,18 +34,53 @@ namespace SpoilsOfTheSlain
             // Per-class patch installation: a single bad target doesn't sink the rest.
             _harmony = new Harmony(PluginGuid);
             int ok = 0, fail = 0;
-            foreach (var t in typeof(Plugin).Assembly.GetTypes())
+            try
             {
-                if (!t.IsClass || t.GetCustomAttribute<HarmonyPatch>() == null) continue;
-                try { _harmony.CreateClassProcessor(t).Patch(); ok++; }
-                catch (System.Exception e)
+                foreach (var t in typeof(Plugin).Assembly.GetTypes())
                 {
-                    fail++;
-                    Log.LogError($"[Patch] {t.Name} failed to install: {e.GetBaseException().Message}");
+                    if (!t.IsClass || t.GetCustomAttribute<HarmonyPatch>() == null) continue;
+                    try { _harmony.CreateClassProcessor(t).Patch(); ok++; }
+                    catch (System.Exception e)
+                    {
+                        fail++;
+                        Log.LogError($"[Patch] {t.Name} failed to install: {e.GetBaseException().Message}");
+                    }
                 }
+                Log.LogInfo($"{PluginName} loaded. {ok} patches installed, {fail} failed. " +
+                            $"Stations: forge={Cfg.InjectIntoForge.Value} alchemy={Cfg.InjectIntoAlchemy.Value} cooking={Cfg.InjectIntoCooking.Value}");
+                VerifyPatches();
             }
-            Log.LogInfo($"{PluginName} loaded. {ok} patches installed, {fail} failed. " +
-                        $"Stations: forge={Cfg.InjectIntoForge.Value} alchemy={Cfg.InjectIntoAlchemy.Value} cooking={Cfg.InjectIntoCooking.Value}");
+            catch (System.Exception e)
+            {
+                Log.LogError($"[VerifyPatches] {PluginGuid}: PatchAll FAILED: {e}");
+            }
+        }
+
+        // Surfaces silent patch failures: counts what actually landed and lists each
+        // patched method at Debug level so we can sanity-check the targets.
+        private void VerifyPatches()
+        {
+            try
+            {
+                var patched = _harmony?.GetPatchedMethods();
+                int count = 0;
+                if (patched != null)
+                {
+                    foreach (var m in patched)
+                    {
+                        count++;
+                        Log.LogDebug($"[VerifyPatches]   - {m?.DeclaringType?.FullName}.{m?.Name}");
+                    }
+                }
+                if (count == 0)
+                    Log.LogWarning($"[VerifyPatches] {PluginGuid}: 0 method(s) patched");
+                else
+                    Log.LogInfo($"[VerifyPatches] {PluginGuid}: {count} method(s) patched");
+            }
+            catch (System.Exception e)
+            {
+                Log.LogError($"[VerifyPatches] {PluginGuid}: enumeration failed: {e}");
+            }
         }
 
         // Single-shot startup driver: every frame, check if Hero.Current is loaded.

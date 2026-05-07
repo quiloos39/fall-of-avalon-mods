@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HarmonyTracer</AssemblyName>
+    <RootNamespace>HarmonyTracer</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <DebugType>portable</DebugType>
+    <Version>0.1.0</Version>
+    <NoWarn>CS0436;CS1701;CS1702;CS0618</NoWarn>
+
+    <GameRoot>C:\Program Files (x86)\Steam\steamapps\common\Tainted Grail FoA</GameRoot>
+    <GameManaged>$(GameRoot)\Fall of Avalon_Data\Managed</GameManaged>
+    <GameBepInExCore>$(GameRoot)\BepInEx\core</GameBepInExCore>
+    <PluginsTarget>$(GameRoot)\BepInEx\plugins</PluginsTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Unity / game DLLs we need for compile-time references. We don't *call* into TG.Main directly,
+         but enumerating loaded assemblies at runtime requires nothing here — these are kept minimal. -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManaged)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- BepInEx + HarmonyX (the BepInEx-bundled fork; same `HarmonyLib` namespace as upstream Harmony) -->
+    <Reference Include="BepInEx">
+      <HintPath>$(GameBepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameBepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(PluginsTarget)')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginsTarget)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Copied $(TargetFileName) to $(PluginsTarget)" />
+  </Target>
+
+</Project>

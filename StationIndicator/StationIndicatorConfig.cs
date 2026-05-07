@@ -12,7 +12,6 @@ namespace StationIndicator
         public ConfigEntry<bool> MarkBlacksmithing { get; }
         public ConfigEntry<bool> MarkAlchemy { get; }
         public ConfigEntry<bool> MarkAllCraftingStations { get; }
-        public ConfigEntry<bool> MarkVendors { get; }
         public ConfigEntry<string> ExtraNamePatterns { get; }
 
         public ConfigEntry<bool> Verbose { get; }
@@ -44,10 +43,6 @@ namespace StationIndicator
             MarkAllCraftingStations = cfg.Bind(
                 "2. Targets", "MarkAllCraftingStations", false,
                 "If true, mark every LocationSpec with a StartCraftingAttachment component, regardless of name. Catches cooking pots / ovens / etc. that the named filters miss.");
-
-            MarkVendors = cfg.Bind(
-                "2. Targets", "MarkVendors", true,
-                "Add a map indicator to merchants / sellers (any LocationSpec with a ShopAttachment component). Uses the same icon as crafting stations.");
 
             ExtraNamePatterns = cfg.Bind(
                 "2. Targets", "ExtraNamePatterns", "",

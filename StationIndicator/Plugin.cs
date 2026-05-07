@@ -10,7 +10,7 @@ namespace StationIndicator
     {
         public const string PluginGuid = "com.user.stationindicator";
         public const string PluginName = "StationIndicator";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.0.0";
 
         internal static ManualLogSource Log;
         internal static StationIndicatorConfig Cfg;
@@ -41,10 +41,38 @@ namespace StationIndicator
                 _harmony = new Harmony(PluginGuid);
                 _harmony.PatchAll(typeof(Plugin).Assembly);
                 Log.LogInfo($"{PluginName} loaded. Harmony patches installed.");
+                VerifyPatches();
             }
             catch (System.Exception e)
             {
-                Log.LogError($"{PluginName} failed to install Harmony patches: {e}");
+                Log.LogError($"[VerifyPatches] {PluginGuid}: PatchAll FAILED: {e}");
+            }
+        }
+
+        // Surfaces silent patch failures: counts what actually landed and lists each
+        // patched method at Debug level so we can sanity-check the targets.
+        private void VerifyPatches()
+        {
+            try
+            {
+                var patched = _harmony?.GetPatchedMethods();
+                int count = 0;
+                if (patched != null)
+                {
+                    foreach (var m in patched)
+                    {
+                        count++;
+                        Log.LogDebug($"[VerifyPatches]   - {m?.DeclaringType?.FullName}.{m?.Name}");
+                    }
+                }
+                if (count == 0)
+                    Log.LogWarning($"[VerifyPatches] {PluginGuid}: 0 method(s) patched");
+                else
+                    Log.LogInfo($"[VerifyPatches] {PluginGuid}: {count} method(s) patched");
+            }
+            catch (System.Exception e)
+            {
+                Log.LogError($"[VerifyPatches] {PluginGuid}: enumeration failed: {e}");
             }
         }
 

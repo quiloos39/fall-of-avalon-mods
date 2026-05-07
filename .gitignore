@@ -3,6 +3,17 @@ bin/
 obj/
 dist/
 
+# Decompiled game DLL reference trees (not source we own)
+*-ref/
+AssetRipped/
+
+# Claude Code harness state (worktrees, scratch)
+.claude/
+
+# DialogExporter generated dumps (large, regeneratable)
+DialogExporter/exports/
+DialogExporter/exports_split/
+
 # Release artefacts
 *.zip
 *.rar

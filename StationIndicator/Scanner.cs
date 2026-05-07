@@ -29,7 +29,6 @@ namespace StationIndicator
         internal static Type LocationSpecType;
         internal static Type MarkerAttachmentType;
         internal static Type StartCraftingAttachmentType;
-        internal static Type ShopAttachmentType;
         internal static Type IAttachmentSpecType;
         internal static FieldInfo WrapperField;
 
@@ -70,7 +69,6 @@ namespace StationIndicator
             LocationSpecType = ResolveType("Awaken.TG.Main.Locations.Setup.LocationSpec");
             MarkerAttachmentType = ResolveType("Awaken.TG.Main.Maps.Markers.MarkerAttachment");
             StartCraftingAttachmentType = ResolveType("Awaken.TG.Main.Locations.Actions.Attachments.StartCraftingAttachment");
-            ShopAttachmentType = ResolveType("Awaken.TG.Main.Locations.Shops.ShopAttachment");
             IAttachmentSpecType = ResolveType("Awaken.TG.Main.Locations.Attachments.IAttachmentSpec");
             if (MarkerAttachmentType != null)
             {
@@ -124,14 +122,6 @@ namespace StationIndicator
                 && (lname.Contains("alchemy") || lname.Contains("alchemist") || lname.Contains("cauldron")))
             {
                 if (StartCraftingAttachmentType != null && go.GetComponent(StartCraftingAttachmentType) != null) return true;
-            }
-            // Vendors are detected by ShopAttachment presence (analogous to
-            // StartCraftingAttachment for stations) — name-based matching is
-            // unreliable since merchants are usually named after the NPC, not
-            // after their role.
-            if (Plugin.Cfg.MarkVendors.Value && ShopAttachmentType != null)
-            {
-                if (go.GetComponent(ShopAttachmentType) != null) return true;
             }
             string extra = Plugin.Cfg.ExtraNamePatterns.Value ?? "";
             if (!string.IsNullOrWhiteSpace(extra))
