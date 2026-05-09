@@ -3,67 +3,67 @@
     "_todo":  [
 
               ],
-    "anchorCount":  21,
+    "anchorCount":  35,
     "anchors":  [
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/CraftingSearchInjector.cs",
-                        "line":  180,
-                        "type":  "VRecipeGridUI",
-                        "member":  "SetHeaderTabName",
-                        "kind":  "method"
-                    },
-                    {
-                        "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/CraftingSortPatches.cs",
-                        "line":  22,
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  23,
                         "type":  "VCRecipeSorting",
                         "member":  "NextSorting",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/CraftingSortPatches.cs",
-                        "line":  99,
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  102,
                         "type":  "VCRecipeSorting",
                         "member":  "OnAttach",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/CraftingSortPatches.cs",
-                        "line":  375,
-                        "type":  "RecipeGridUI",
-                        "member":  "AllRecipesOfCurrentType",
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  381,
+                        "type":  "Awaken.TG.Main.Crafting.HandCrafting.RecipeView.VRecipeTabContents",
+                        "member":  "SortChildren",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/CraftingSortPatches.cs",
-                        "line":  413,
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  477,
+                        "type":  "Awaken.TG.Main.Heroes.PlayerInput",
+                        "member":  "HandleKeyboard",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "BetterSortingCrafting",
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  483,
+                        "type":  "Awaken.TG.Main.Heroes.PlayerInput",
+                        "member":  "HandleRegisteredPlayerInputs",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "BetterSortingCrafting",
+                        "file":  "mods/BetterSortingCrafting/CraftingSortPatches.cs",
+                        "line":  489,
                         "type":  "RecipeGridUI",
                         "member":  "OnFullyInitialized",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/InventorySearchInjector.cs",
-                        "line":  286,
-                        "type":  "VItemsDefaultUI",
+                        "file":  "mods/BetterSortingCrafting/InventorySearchBar.cs",
+                        "line":  250,
+                        "type":  "Awaken.TG.Main.Heroes.CharacterSheet.Items.Panel.VItemsDefaultUI",
                         "member":  "OnMount",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/InventorySearchInjector.cs",
-                        "line":  299,
-                        "type":  "ItemsListUI",
-                        "member":  "Refresh",
-                        "kind":  "method"
-                    },
-                    {
-                        "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/InventorySortPatch.cs",
+                        "file":  "mods/BetterSortingCrafting/InventorySortPatch.cs",
                         "line":  13,
                         "type":  "VCItemSorting",
                         "member":  "NextSorting",
@@ -71,23 +71,23 @@
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/PlayerInputPatches.cs",
-                        "line":  11,
-                        "type":  "PlayerInput",
-                        "member":  "HandleKeyboard",
+                        "file":  "mods/BetterSortingCrafting/ItemFilterPatch.cs",
+                        "line":  20,
+                        "type":  "VCItemSorting",
+                        "member":  "OnAttach",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/PlayerInputPatches.cs",
-                        "line":  17,
-                        "type":  "PlayerInput",
-                        "member":  "HandleRegisteredPlayerInputs",
+                        "file":  "mods/BetterSortingCrafting/ItemFilterPatch.cs",
+                        "line":  74,
+                        "type":  "VCItemSorting",
+                        "member":  "NextFilter",
                         "kind":  "method"
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/SharedPopup.cs",
+                        "file":  "mods/BetterSortingCrafting/SharedPopup.cs",
                         "line":  38,
                         "type":  "VContextPopupUI",
                         "member":  "Refresh",
@@ -95,7 +95,7 @@
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/SharedPopup.cs",
+                        "file":  "mods/BetterSortingCrafting/SharedPopup.cs",
                         "line":  184,
                         "type":  "VContextPopupUI",
                         "member":  "OnInitialize",
@@ -103,15 +103,63 @@
                     },
                     {
                         "mod":  "BetterSortingCrafting",
-                        "file":  "BetterSortingCrafting/SharedPopup.cs",
+                        "file":  "mods/BetterSortingCrafting/SharedPopup.cs",
                         "line":  208,
                         "type":  "VContextPopupUI",
                         "member":  "SyncPosition",
                         "kind":  "method"
                     },
                     {
+                        "mod":  "GuardVariety",
+                        "file":  "mods/GuardVariety/GuardVarietyPatches.cs",
+                        "line":  21,
+                        "type":  "NpcInitializer",
+                        "member":  "InitClothesAndBodyFeatures",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "GuardVariety",
+                        "file":  "mods/GuardVariety/HelmetRemovalPatches.cs",
+                        "line":  26,
+                        "type":  "NpcInitializer",
+                        "member":  "NotifyVisualLoaded",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "GuardVariety",
+                        "file":  "mods/GuardVariety/PrefabSwapPatches.cs",
+                        "line":  18,
+                        "type":  "NpcElement",
+                        "member":  "InitFromAttachment",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "QuestRegionGrouping",
+                        "file":  "mods/QuestRegionGrouping/QuestLogPatches.cs",
+                        "line":  10,
+                        "type":  "QuestLogUI",
+                        "member":  "AfterViewSpawned",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "QuestRegionGrouping",
+                        "file":  "mods/QuestRegionGrouping/QuestLogPatches.cs",
+                        "line":  33,
+                        "type":  "VQuestListUI",
+                        "member":  "ChangeListVisibility",
+                        "kind":  "method"
+                    },
+                    {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/DiscoveryPatches.cs",
+                        "file":  "mods/SpoilsOfTheSlain/DialoguePatches.cs",
+                        "line":  14,
+                        "type":  "DialogueAction",
+                        "member":  "StartDialogue",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "SpoilsOfTheSlain",
+                        "file":  "mods/SpoilsOfTheSlain/DiscoveryPatches.cs",
                         "line":  47,
                         "type":  "NPCItemDroppedElement",
                         "member":  "OnFullyInitialized",
@@ -119,7 +167,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/DiscoveryPatches.cs",
+                        "file":  "mods/SpoilsOfTheSlain/DiscoveryPatches.cs",
                         "line":  57,
                         "type":  "ContainerInventory",
                         "member":  "Add",
@@ -127,7 +175,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/DiscoveryPatches.cs",
+                        "file":  "mods/SpoilsOfTheSlain/DiscoveryPatches.cs",
                         "line":  67,
                         "type":  "DroppedItemSpawner",
                         "member":  "OnItemDropped",
@@ -135,7 +183,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/KillUnlock.cs",
+                        "file":  "mods/SpoilsOfTheSlain/KillUnlock.cs",
                         "line":  16,
                         "type":  "DeathElement",
                         "member":  "OnDeath",
@@ -143,7 +191,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/RecipeInjector.cs",
+                        "file":  "mods/SpoilsOfTheSlain/RecipeInjector.cs",
                         "line":  20,
                         "type":  "HandcraftingTemplate",
                         "member":  "Recipes",
@@ -151,7 +199,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/RecipeInjector.cs",
+                        "file":  "mods/SpoilsOfTheSlain/RecipeInjector.cs",
                         "line":  35,
                         "type":  "AlchemyTemplate",
                         "member":  "Recipes",
@@ -159,7 +207,7 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/RecipeInjector.cs",
+                        "file":  "mods/SpoilsOfTheSlain/RecipeInjector.cs",
                         "line":  50,
                         "type":  "CookingTemplate",
                         "member":  "Recipes",
@@ -167,10 +215,74 @@
                     },
                     {
                         "mod":  "SpoilsOfTheSlain",
-                        "file":  "SpoilsOfTheSlain/RecipeInjector.cs",
+                        "file":  "mods/SpoilsOfTheSlain/RecipeInjector.cs",
                         "line":  67,
                         "type":  "Awaken.TG.Main.Heroes.HeroRecipes",
                         "member":  "IsLearned",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "StationIndicator",
+                        "file":  "mods/StationIndicator/Scanner.cs",
+                        "line":  195,
+                        "type":  "Awaken.TG.Main.Locations.Setup.LocationSpec",
+                        "member":  "GetAttachments",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  16,
+                        "type":  "DistanceCullingSetting",
+                        "member":  "BiasValue",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  33,
+                        "type":  "ShadowsController",
+                        "member":  "OnSettingChanged",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  55,
+                        "type":  "ByLayerFarPlane",
+                        "member":  "ApplyLayers",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  71,
+                        "type":  "DayNightSystem",
+                        "member":  "HandleFog",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  100,
+                        "type":  "PlayerInput",
+                        "member":  "AfterDelivery",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  115,
+                        "type":  "LeshyQualityManager",
+                        "member":  "SpawnDistance",
+                        "kind":  "method"
+                    },
+                    {
+                        "mod":  "ViewDistanceTuner",
+                        "file":  "mods/ViewDistanceTuner/ViewDistancePatches.cs",
+                        "line":  131,
+                        "type":  "LeshyQualityManager",
+                        "member":  "BillboardDistance",
                         "kind":  "method"
                     }
                 ]

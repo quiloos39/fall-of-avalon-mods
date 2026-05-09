@@ -19,12 +19,12 @@ that can't be vendored or used in cloud runners).
 From the repo root:
 
 ```powershell
-./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2
+.\tools\release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2
 ```
 
 The script:
-1. Writes `1.0.1` (the **mod** version) into `PluginVersion` in `<Mod>/Plugin.cs`
-   and `<Version>` in `<Mod>/<Mod>.csproj`. Idempotent — re-running with the
+1. Writes `1.0.1` (the **mod** version) into `PluginVersion` in `mods/<Mod>/Plugin.cs`
+   and `<Version>` in `mods/<Mod>/<Mod>.csproj`. Idempotent — re-running with the
    same version is a no-op rather than an error.
 2. `dotnet build -c Release` for that one mod.
 3. Stages `BepInEx/plugins/<Mod>.dll` and zips to `dist/<Mod>-v<modversion>.zip`.
@@ -40,7 +40,7 @@ After the script finishes, commit + tag + push manually if you want git to
 match the released version:
 
 ```powershell
-git add <Mod>/Plugin.cs <Mod>/<Mod>.csproj
+git add mods/<Mod>/Plugin.cs mods/<Mod>/<Mod>.csproj
 git commit -m "Release <Mod> v<modversion> (Avalon <gameversion>)"
 git tag <Mod>-v<modversion>
 git push origin HEAD --tags
@@ -90,14 +90,14 @@ Bump rules:
    ```json
    "MyNewMod": { "mod_id": 999, "file_group_id": "1234567" }
    ```
-4. Done — `./release.ps1 -Mod MyNewMod -ModVersion 0.1.0 -GameVersion 0.5.2` works.
+4. Done — `.\tools\release.ps1 -Mod MyNewMod -ModVersion 0.1.0 -GameVersion 0.5.2` works.
 
 ## Recovering from a failed Nexus upload
 
 If the Nexus call failed (network blip, rate limit), just re-run the same command:
 
 ```powershell
-./release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2
+.\tools\release.ps1 -Mod AutoLoot -ModVersion 1.0.1 -GameVersion 0.5.2
 ```
 
 The version-bump step is idempotent, the build is cached, the zip rebuilds,

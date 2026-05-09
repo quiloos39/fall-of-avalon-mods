@@ -68,6 +68,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # --- constants -----------------------------------------------------------
+$RepoRoot     = Split-Path $PSScriptRoot -Parent   # tools/ is one level under repo
 $SteamAppId   = 1466060
 $GameRoot     = "C:\Program Files (x86)\Steam\steamapps\common\Tainted Grail FoA"
 $GameExeName  = "Fall of Avalon"          # Get-Process drops the .exe suffix
@@ -75,8 +76,19 @@ $GameExePath  = Join-Path $GameRoot "Fall of Avalon.exe"
 $BepInExLog   = Join-Path $GameRoot "BepInEx\LogOutput.log"
 $PluginsDir   = Join-Path $GameRoot "BepInEx\plugins"
 $ScriptsDir   = Join-Path $GameRoot "BepInEx\scripts"
-$Solution     = Join-Path $PSScriptRoot "TaintedGrailMods.sln"
+$Solution     = Join-Path $RepoRoot "TaintedGrailMods.sln"
+$ProjectRoots = @('mods', 'dev')          # ordered: mods/ checked before dev/
 $KillTimeout  = [TimeSpan]::FromSeconds(8)
+
+# Resolve a project name like "BetterSortingCrafting" to its csproj path,
+# checking $ProjectRoots in order. Returns $null if not found.
+function Resolve-ModProject([string]$name) {
+    foreach ($root in $ProjectRoots) {
+        $candidate = Join-Path $RepoRoot (Join-Path $root (Join-Path $name "$name.csproj"))
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
 
 function Write-Step($msg, $color = "Cyan")  { Write-Host "==> $msg" -ForegroundColor $color }
 function Write-Note($msg)                   { Write-Host "    $msg" -ForegroundColor DarkGray }
@@ -92,9 +104,9 @@ function Invoke-Build {
     }
 
     if ($Mod) {
-        $proj = Join-Path $PSScriptRoot (Join-Path $Mod "$Mod.csproj")
-        if (-not (Test-Path $proj)) {
-            throw "Project not found: $proj"
+        $proj = Resolve-ModProject $Mod
+        if (-not $proj) {
+            throw "Project '$Mod' not found under $($ProjectRoots -join ', ')/ in $RepoRoot"
         }
         Write-Step "Building $Mod ($Configuration)"
         $target = $proj
@@ -125,11 +137,16 @@ function Invoke-ScriptEngineCopy {
             throw "Built DLL not found at $src -- did the post-build copy succeed?"
         }
         Copy-Item $src (Join-Path $ScriptsDir "$Mod.dll") -Force
-        Write-Ok "Staged $Mod.dll -> BepInEx\scripts\ (press F6 in-game to reload)"
+        Write-Ok "Staged $Mod.dll -> BepInEx\scripts\ (auto-reloads in ~1 s; manual F11)"
     } else {
-        # Copy every project's freshly-built DLL we can identify.
-        $modDirs = Get-ChildItem $PSScriptRoot -Directory |
-            Where-Object { Test-Path (Join-Path $_.FullName "$($_.Name).csproj") }
+        # Copy every project's freshly-built DLL we can identify (under mods/ + dev/).
+        $modDirs = $ProjectRoots | ForEach-Object {
+            $rootPath = Join-Path $RepoRoot $_
+            if (Test-Path $rootPath) {
+                Get-ChildItem $rootPath -Directory |
+                    Where-Object { Test-Path (Join-Path $_.FullName "$($_.Name).csproj") }
+            }
+        }
         foreach ($d in $modDirs) {
             $src = Join-Path $PluginsDir "$($d.Name).dll"
             if (Test-Path $src) {
@@ -137,7 +154,7 @@ function Invoke-ScriptEngineCopy {
                 Write-Note "  staged $($d.Name).dll"
             }
         }
-        Write-Ok "All staged. Press F6 in-game (default ScriptEngine reload key)."
+        Write-Ok "All staged. Reload happens automatically via FileSystemWatcher (~1 s), or press F11 in-game."
     }
 }
 

@@ -35,7 +35,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path $PSScriptRoot -Parent   # tools/ is one level under repo
+$ProjectRoots = @('mods', 'dev')               # ordered: mods/ checked before dev/
+
+# Resolve a mod name like "AutoLoot" to its directory under mods/ or dev/.
+function Resolve-ModDir([string]$name) {
+    foreach ($root in $ProjectRoots) {
+        $candidate = Join-Path $RepoRoot (Join-Path $root $name)
+        if (Test-Path (Join-Path $candidate "$name.csproj")) { return $candidate }
+    }
+    return $null
+}
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Done($msg) { Write-Host "    $msg" -ForegroundColor Green }
@@ -180,11 +190,13 @@ function Send-NexusUpload {
 # ---------------------------------------------------------------------------
 # Validate inputs and look up Nexus metadata BEFORE doing build work.
 # ---------------------------------------------------------------------------
-$ModDir   = Join-Path $RepoRoot $Mod
-$Csproj   = Join-Path $ModDir   "$Mod.csproj"
-$PluginCs = Join-Path $ModDir   'Plugin.cs'
+$ModDir = Resolve-ModDir $Mod
+if (-not $ModDir) {
+    throw "Mod '$Mod' not found under $($ProjectRoots -join ', ')/ in $RepoRoot"
+}
+$Csproj   = Join-Path $ModDir "$Mod.csproj"
+$PluginCs = Join-Path $ModDir 'Plugin.cs'
 
-if (-not (Test-Path $ModDir))   { throw "Mod folder not found: $ModDir" }
 if (-not (Test-Path $Csproj))   { throw "Missing csproj: $Csproj" }
 if (-not (Test-Path $PluginCs)) { throw "Missing Plugin.cs: $PluginCs" }
 

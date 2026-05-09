@@ -17,31 +17,36 @@
 
 - Source: `https://github.com/BepInEx/BepInEx.Debug/releases/download/r11.1/ScriptEngine_r11.1.zip`
 - Installed `ScriptEngine.dll` to `<GameRoot>\BepInEx\plugins\`
-- Created `<GameRoot>\BepInEx\scripts\` (empty — populated by `dev-relaunch.ps1 -ScriptEngine`)
-- Default reload key: **F6** (override via `BepInEx\config\BepInEx.Debug.ScriptEngine.cfg` once it's been generated on first launch)
+- Created `<GameRoot>\BepInEx\scripts\` (empty — populated by `tools\dev-relaunch.ps1 -ScriptEngine`)
+- Pre-seeded config at `<GameRoot>\BepInEx\config\BepInEx.Debug.ScriptEngine.cfg`:
+  - `[AutoReload] EnableFileSystemWatcher = true` — auto-reload on file change (no hotkey needed)
+  - `[AutoReload] AutoReloadDelay = 1` — 1 s after the file lands
+  - `[General] ReloadKey = F11` — manual reload fallback. **Moved off the F6 default** because AutoLoot uses F6 as its toggle hotkey (`com.user.autoloot.cfg → ToggleHotkey = F6`).
 
 ## Fast loop (preferred)
 
-Edit code, then:
+Edit code, then run:
 
 ```powershell
-.\dev-relaunch.ps1 -Mod BetterSortingCrafting -ScriptEngine
+.\tools\dev-relaunch.ps1 -Mod BetterSortingCrafting -ScriptEngine
 ```
 
-This builds the project (post-build copies the DLL to `BepInEx\plugins\`), then stages a copy in `BepInEx\scripts\`. Press **F6** in-game. ScriptEngine destroys the old plugin instance, fires `OnDestroy` (which unpatches), then loads and `Awake()`s the fresh DLL.
+This builds the project (post-build copies the DLL to `BepInEx\plugins\`), then stages a copy in `BepInEx\scripts\`. The FileSystemWatcher detects the file change after ~1 s and reloads automatically — no key press required. ScriptEngine destroys the old plugin instance, fires `OnDestroy` (which unpatches), then loads and `Awake()`s the fresh DLL.
 
-Caveats: ScriptEngine cannot reload BepInEx infrastructure itself (changes to `BepInPlugin` GUID/metadata still need a relaunch), and any patches that target methods called during scene load won't re-run on already-loaded scenes.
+Manual reload fallback: press **F11** in-game (changed from the F6 default to avoid the AutoLoot conflict).
+
+Caveats: ScriptEngine cannot reload BepInEx infrastructure itself (changes to `BepInPlugin` GUID/metadata still need a relaunch), and any patches that target methods called during scene load won't re-run on already-loaded scenes. `World.AssignServices` is one-shot per app lifetime — mods that register services (none of ours currently do) will not work with reload and need a full relaunch.
 
 ## Slow loop (full relaunch fallback)
 
 When ScriptEngine isn't enough — new plugin, GUID change, configuration entry change, or you just want a clean slate:
 
 ```powershell
-.\dev-relaunch.ps1                                    # build all, kill, relaunch via Steam
-.\dev-relaunch.ps1 -Mod StationIndicator              # build single project, relaunch
-.\dev-relaunch.ps1 -Mod StationIndicator -TailLog     # ...and tail BepInEx\LogOutput.log
-.\dev-relaunch.ps1 -NoBuild                           # just kill + relaunch (e.g. after VS build)
-.\dev-relaunch.ps1 -NoLaunch                          # kill only
+.\tools\dev-relaunch.ps1                                    # build all, kill, relaunch via Steam
+.\tools\dev-relaunch.ps1 -Mod StationIndicator              # build single project, relaunch
+.\tools\dev-relaunch.ps1 -Mod StationIndicator -TailLog     # ...and tail BepInEx\LogOutput.log
+.\tools\dev-relaunch.ps1 -NoBuild                           # just kill + relaunch (e.g. after VS build)
+.\tools\dev-relaunch.ps1 -NoLaunch                          # kill only
 ```
 
 The script:

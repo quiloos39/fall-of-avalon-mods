@@ -4,15 +4,16 @@ obj/
 dist/
 
 # Decompiled game DLL reference trees (not source we own)
-*-ref/
-AssetRipped/
+refs/
+# AssetRipper output (multi-GB Unity asset dump)
+assets/
 
 # Claude Code harness state (worktrees, scratch)
 .claude/
 
 # DialogExporter generated dumps (large, regeneratable)
-DialogExporter/exports/
-DialogExporter/exports_split/
+dev/DialogExporter/exports/
+dev/DialogExporter/exports_split/
 
 # Release artefacts
 *.zip

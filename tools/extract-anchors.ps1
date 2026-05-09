@@ -42,7 +42,9 @@ $skipDirRegexes = @(
     '\\obj\\',
     '\\\.claude\\',
     '\\\.git\\',
-    '-ref\\'
+    '\\refs\\',
+    '\\assets\\',
+    '\\dist\\'
 )
 
 function Should-Skip([string]$path) {
@@ -102,6 +104,18 @@ $accessTools = [regex]::new(
     '\s*\)\s*,\s*(?:' + $reLitName + '|' + $reNameOf + ')',
     [System.Text.RegularExpressions.RegexOptions]::Compiled)
 
+# AccessTools.Method/Field/PropertyGetter(t, "Y") or (..., "Y") where the type token
+# is a local var. We pair this with a nearby AccessTools.TypeByName("Awaken.TG.X")
+# so the full type ref still ends up in the inventory.
+$accessToolsByVar = [regex]::new(
+    'AccessTools\.(?<kind>Method|Field|PropertyGetter|PropertySetter)\s*\(\s*[A-Za-z_][\w]*\s*,\s*' +
+    $reLitName,
+    [System.Text.RegularExpressions.RegexOptions]::Compiled)
+
+$typeByName = [regex]::new(
+    'AccessTools\.TypeByName\s*\(\s*"(?<typeRef>[A-Za-z_][\w\.]*)"\s*\)',
+    [System.Text.RegularExpressions.RegexOptions]::Compiled)
+
 # Detector: things that *look* like a HarmonyPatch but didn't match the above.
 $harmonySniff = [regex]::new('\[(?:HarmonyLib\.)?HarmonyPatch\b',
     [System.Text.RegularExpressions.RegexOptions]::Compiled)
@@ -138,8 +152,20 @@ foreach ($mod in $projects.Keys | Sort-Object) {
         $totalCs++
         # Use $rel so we get a stable repo-relative path (forward slashes for diff sanity).
         $rel = $f.FullName.Substring($RepoRoot.Length).TrimStart('\','/').Replace('\','/')
-        # Read with line numbers
         $lines = [System.IO.File]::ReadAllLines($f.FullName)
+
+        # Pre-pass: index AccessTools.TypeByName("X") so we can resolve the
+        # AccessTools.Method(t, "Y") pattern where the type comes from a local.
+        # SortedList[int,string] can't be New-Object'd in 5.1 (the `,` inside
+        # the type spec confuses the parser); use a hashtable keyed by line index.
+        $typeByNameAt = @{}
+        for ($pi = 0; $pi -lt $lines.Length; $pi++) {
+            $tnm = $typeByName.Match($lines[$pi])
+            if ($tnm.Success) {
+                $typeByNameAt[$pi] = $tnm.Groups['typeRef'].Value
+            }
+        }
+
         for ($i = 0; $i -lt $lines.Length; $i++) {
             $line = $lines[$i]
             $lineNo = $i + 1
@@ -204,6 +230,31 @@ foreach ($mod in $projects.Keys | Sort-Object) {
                     member = (Member-FromMatch $m)
                     kind   = $kind
                 })
+                continue
+            }
+
+            # ---- AccessTools.Method(t, "Y") where t came from TypeByName --
+            $m = $accessToolsByVar.Match($line)
+            if ($m.Success) {
+                # Find the most recent TypeByName above us in the same file.
+                $resolvedType = $null
+                foreach ($k in ($typeByNameAt.Keys | Sort-Object -Descending)) {
+                    if ($k -lt $i) { $resolvedType = $typeByNameAt[$k]; break }
+                }
+                if ($resolvedType) {
+                    $atKind = $m.Groups['kind'].Value
+                    $kind   = if ($atKind -eq 'Field') { 'field' } else { 'method' }
+                    $anchors.Add([pscustomobject]@{
+                        mod    = $mod
+                        file   = $rel
+                        line   = $lineNo
+                        type   = $resolvedType
+                        member = $m.Groups['member'].Value
+                        kind   = $kind
+                    })
+                } else {
+                    $todos.Add("$($rel):$lineNo  AccessTools call w/ var-typed type, no nearby TypeByName: $($line.Trim())")
+                }
                 continue
             }
 
