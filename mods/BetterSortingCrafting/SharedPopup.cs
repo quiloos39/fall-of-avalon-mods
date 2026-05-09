@@ -179,32 +179,10 @@ namespace BetterSortingCrafting
         }
     }
 
-    // Override pivot — vanilla picks pivot based on cursor position; our anchor
-    // is at the bottom of the screen, so popup must grow up and to the right.
-    [HarmonyPatch(typeof(VContextPopupUI), "OnInitialize")]
-    internal static class VContextPopupUI_OnInitialize_Patch
-    {
-        static void Postfix(VContextPopupUI __instance)
-        {
-            try
-            {
-                if (!PopupOwnership.IsOurs(__instance)) return;
-                if (SpawnContext.Anchor == null) return;
-                var vlRect = __instance.verticalLayout != null
-                    ? __instance.verticalLayout.transform as RectTransform
-                    : null;
-                if (vlRect != null)
-                    vlRect.pivot = new Vector2(0f, 0f);     // bottom-left → grows up-right
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[BetterSorting] pivot override failed: {e.GetBaseException().Message}");
-            }
-        }
-    }
-
-    // Override position — vanilla puts popup at Input.mousePosition. We anchor
-    // to the prompt's top-left so it sits directly above the "SORT: X" line.
+    // Override position + pivot — vanilla puts popup at Input.mousePosition.
+    // We anchor to the prompt and decide grow direction based on whether the
+    // popup fits above. Without this check a top-of-screen anchor (e.g. the
+    // crafting filter prompt) makes the popup overflow the top edge.
     [HarmonyPatch(typeof(VContextPopupUI), "SyncPosition")]
     internal static class VContextPopupUI_SyncPosition_Patch
     {
@@ -224,9 +202,36 @@ namespace BetterSortingCrafting
                 if (anchorRect == null) { SpawnContext.Anchor = null; return; }
 
                 anchorRect.GetWorldCorners(_corners);
-                // 0=BL, 1=TL, 2=TR, 3=BR. Pivot is BL of popup, so position at TL of anchor
-                // makes popup sit immediately above the prompt, left-aligned.
-                __instance.transform.position = _corners[1];
+                // 0=BL, 1=TL, 2=TR, 3=BR (world-space).
+
+                var vlRect = __instance.verticalLayout != null
+                    ? __instance.verticalLayout.transform as RectTransform
+                    : null;
+
+                // Force a layout pass so rect.height is settled before we
+                // check overflow — Refresh built children but Unity may not
+                // have laid them out yet.
+                if (vlRect != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(vlRect);
+
+                float popupHeight = vlRect != null ? vlRect.rect.height : 0f;
+                float spaceAbove  = Screen.height - _corners[1].y;
+                bool openDown = popupHeight > 0f
+                    ? popupHeight > spaceAbove
+                    : _corners[1].y < Screen.height * 0.5f;     // fallback when height not measured
+
+                if (openDown)
+                {
+                    // Popup TL at anchor BL → grows down-right.
+                    __instance.transform.position = _corners[0];
+                    if (vlRect != null) vlRect.pivot = new Vector2(0f, 1f);
+                }
+                else
+                {
+                    // Popup BL at anchor TL → grows up-right (default).
+                    __instance.transform.position = _corners[1];
+                    if (vlRect != null) vlRect.pivot = new Vector2(0f, 0f);
+                }
 
                 SpawnContext.Anchor = null;     // consume
             }

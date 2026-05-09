@@ -105,5 +105,4 @@ namespace BetterSortingCrafting
             else list.Add(toInsert);
         }
     }
-
 }

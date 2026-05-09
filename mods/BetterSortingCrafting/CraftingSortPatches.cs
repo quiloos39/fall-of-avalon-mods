@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
+using Awaken.TG.Main.Crafting.HandCrafting;
 using Awaken.TG.Main.Crafting.HandCrafting.RecipeView;
 using Awaken.TG.Main.Crafting.Recipes;
 using Awaken.TG.Main.Localization;
@@ -24,15 +25,17 @@ namespace BetterSortingCrafting
     {
         static bool Prefix(VCRecipeSorting __instance)
         {
+            Plugin.Log.LogInfo($"[BetterSorting] NextSorting Prefix fired (instance={__instance?.name})");
             try
             {
                 CustomSortings.EnsureBuilt();
 
                 var tabContents = __instance.Target;
                 var grid = tabContents?.RecipeGridUI;
-                if (grid == null) return true;
+                if (grid == null) { Plugin.Log.LogWarning("[BetterSorting] NextSorting: grid was null, falling through to vanilla"); return true; }
 
                 FilterState.ActiveGrid = grid;
+                SearchBar.Ensure(__instance);
 
                 var options = BuildSortOptions(grid);
                 SpawnContext.Anchor = __instance.sortPrompt != null
@@ -105,6 +108,13 @@ namespace BetterSortingCrafting
             {
                 var tabContents = __instance.Target;
                 if (tabContents == null) return;
+
+                // Make the search bar visible as soon as crafting attaches —
+                // matches BetterUI's pattern of injecting on OnMount, instead
+                // of waiting for a sort/filter keypress.
+                var grid = tabContents.RecipeGridUI;
+                if (grid != null) FilterState.ActiveGrid = grid;
+                SearchBar.Ensure(__instance);
 
                 // Idempotent — return if we already registered a filter prompt
                 // for this VC. Belt-and-braces against double OnAttach (real
@@ -214,12 +224,13 @@ namespace BetterSortingCrafting
         }
 
         // Format mirrors vanilla VCItemSorting.RefreshPromptName: greyed-out
-        // "Filter:" prefix, white italic-semibold value next to it.
+        // "Filter:" prefix, white italic-semibold value next to it. The value
+        // is "Group / Label" for grouped filters, just "Label" for All.
         public static string BuildLabel()
         {
             var prefix = LocTerms.UIItemsChangeFilter.Translate()
                 .ColoredText(ARColor.MainGrey).FontLight();
-            var value = FilterState.WeaponFilter.Label()
+            var value = FilterState.ItemFilter.PromptLabel
                 .Italic().ColoredText(ARColor.MainWhite).FontSemiBold();
             return prefix + " " + value;
         }
@@ -248,14 +259,10 @@ namespace BetterSortingCrafting
                 if (grid == null) return;
 
                 FilterState.ActiveGrid = grid;
+                SearchBar.Ensure(source);
 
-                bool weaponish = IsWeaponishTab(grid.CurrentType);
-                var options = BuildFilterOptions(weaponish);
-
-                SpawnContext.Anchor = FilterPromptRegistry.GetAnchor(source)
-                    ?? (source.sortPrompt != null ? source.sortPrompt.transform : source.transform);
-
-                ContextPopupUI.CreatePopup(tabContents, options);
+                AnchorAtSortPrompt(source);
+                ContextPopupUI.CreatePopup(tabContents, BuildTopLevelFilterOptions(tabContents, source));
             }
             catch (Exception e)
             {
@@ -264,70 +271,164 @@ namespace BetterSortingCrafting
             }
         }
 
-        private static List<ContextPopupOption> BuildFilterOptions(bool weaponish)
+        private static void AnchorAtSortPrompt(VCRecipeSorting source)
+        {
+            SpawnContext.Anchor = FilterPromptRegistry.GetAnchor(source)
+                ?? (source.sortPrompt != null ? source.sortPrompt.transform : source.transform);
+        }
+
+        // Top-level popup: All + each category opens a sub-popup. The active
+        // filter's category gets highlighted so the user can see where they
+        // last narrowed.
+        private static List<ContextPopupOption> BuildTopLevelFilterOptions(RecipeTabContents tabContents, VCRecipeSorting source)
         {
             var options = new List<ContextPopupOption>();
             int order = 0;
 
-            if (weaponish)
-            {
-                foreach (var f in FilterState.AllValues)
+            options.Add(new ContextPopupOption(
+                text: "All",
+                color: ReferenceEquals(FilterState.ItemFilter, RecipeFilter.All)
+                    ? VCRecipeSorting_NextSorting_Patch.Highlight
+                    : Color.white,
+                callback: () =>
                 {
-                    var captured = f;
-                    var color = FilterState.WeaponFilter == f
-                        ? VCRecipeSorting_NextSorting_Patch.Highlight
-                        : Color.white;
-                    options.Add(new ContextPopupOption(
-                        text: f.Label(),
-                        color: color,
-                        callback: () =>
-                        {
-                            FilterState.WeaponFilter = captured;
-                            RefreshLabel();
-                            RefreshGrid();
-                        },
-                        enabled: true,
-                        sortingOrder: order++));
-                }
-            }
-            else
+                    FilterState.ItemFilter = RecipeFilter.All;
+                    RefreshLabel();
+                    RefreshGrid();
+                },
+                enabled: true,
+                sortingOrder: order++));
+
+            foreach (var (groupLabel, filters) in RecipeFilter.Groups)
             {
-                // No applicable filters on this tab — show a single hint row
-                // so the user understands what happened. The row is enabled:
-                // false (greyed-out, no-op).
+                var capturedFilters = filters;
+                var capturedGroup = groupLabel;
+                bool isActiveGroup = FilterState.ItemFilter.Group == groupLabel;
                 options.Add(new ContextPopupOption(
-                    text: "(no filters for this tab)",
-                    color: new Color(0.55f, 0.55f, 0.6f),
-                    callback: () => { },
-                    enabled: false,
+                    text: groupLabel + "  ▸",
+                    color: isActiveGroup ? VCRecipeSorting_NextSorting_Patch.Highlight : Color.white,
+                    callback: () => OpenSubFilterPopup(tabContents, source, capturedGroup, capturedFilters),
+                    enabled: true,
                     sortingOrder: order++));
             }
 
             return options;
         }
 
-        public static bool IsWeaponishTab(RecipeTabType ct)
+        private static void OpenSubFilterPopup(RecipeTabContents tabContents, VCRecipeSorting source, string groupLabel, RecipeFilter[] filters)
         {
-            return ct == RecipeTabType.All
-                || ct == RecipeTabType.Weapon
-                || ct == RecipeTabType.Arrows;
+            try
+            {
+                var options = new List<ContextPopupOption>();
+                int order = 0;
+                foreach (var f in filters)
+                {
+                    var captured = f;
+                    options.Add(new ContextPopupOption(
+                        text: captured.Label,
+                        color: ReferenceEquals(FilterState.ItemFilter, captured)
+                            ? VCRecipeSorting_NextSorting_Patch.Highlight
+                            : Color.white,
+                        callback: () =>
+                        {
+                            FilterState.ItemFilter = captured;
+                            RefreshLabel();
+                            RefreshGrid();
+                        },
+                        enabled: true,
+                        sortingOrder: order++));
+                }
+                AnchorAtSortPrompt(source);
+                ContextPopupUI.CreatePopup(tabContents, options);
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"[BetterSorting] sub-filter popup '{groupLabel}' failed: {e.GetBaseException()}");
+                SpawnContext.Anchor = null;
+            }
         }
 
-        // Force the tab to drop its existing slots and rebuild from the
-        // (now-filtered) AllRecipesOfCurrentType. RecipeGridUI.Refresh by
-        // itself only re-sorts in place — the slots persist if force is
-        // false, which is why filter changes appeared not to take effect.
+        // Filter refresh that mirrors how vanilla sort works: never touch the
+        // RecipeSlot collection, just trigger ContentsUpdated. Vanilla sort
+        // is fast because it RefreshIndex's existing slots and lets the
+        // recycler reorder _models — no Object.Instantiate, no Discard.
+        //
+        // We piggy-back on that same path: contentsChanged=true makes
+        // VRecipeTabContents.SortChildren run, and our postfix on SortChildren
+        // (below) prunes the recycler's _models list to matching slots only.
+        // The recycler then retargets its small pool of view GameObjects to
+        // the smaller _models — same cost shape as a sort change.
         public static void RefreshGrid()
         {
             try
             {
                 var grid = FilterState.ActiveGrid;
                 if (grid == null) return;
-                grid.CurrentTab?.Refresh(force: true, contentsChanged: true);
+                grid.CurrentTab?.Refresh(force: false, contentsChanged: true);
             }
             catch (Exception e)
             {
                 Plugin.Log.LogError($"[BetterSorting] refresh failed: {e.GetBaseException().Message}");
+            }
+        }
+    }
+
+    // Postfix on SortChildren — runs after vanilla re-indexes all slots and
+    // OrderChangedRefresh sorts _models by Index. We rebuild _models from
+    // tab.Elements<RecipeSlot>() in the freshly-assigned Index order, but
+    // skip non-matching slots. The slots themselves stay as Element children
+    // (so widening the filter just re-includes them, no respawn needed).
+    [HarmonyPatch(typeof(Awaken.TG.Main.Crafting.HandCrafting.RecipeView.VRecipeTabContents), "SortChildren")]
+    internal static class VRecipeTabContents_SortChildren_Patch
+    {
+        static void Postfix(Awaken.TG.Main.Crafting.HandCrafting.RecipeView.VRecipeTabContents __instance)
+        {
+            try
+            {
+                var tab = __instance?.Target;
+                if (tab == null) return;
+                var grid = tab.RecipeGridUI;
+                if (grid == null) return;
+
+                var listUI = __instance.recipeListUI;
+                if (listUI == null) return;
+                var rcm = listUI.GridManager;
+                if (rcm == null) return;
+
+                bool itemFilterActive = !ReferenceEquals(FilterState.ItemFilter, RecipeFilter.All);
+                bool searchApplies = !string.IsNullOrEmpty(FilterState.SearchText);
+
+                var ordered = new List<RecipeSlot>();
+                foreach (var slot in tab.Elements<RecipeSlot>().GetManagedEnumerator())
+                    if (slot != null) ordered.Add(slot);
+                ordered.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+                rcm._models.Clear();
+                foreach (var slot in ordered)
+                {
+                    if (itemFilterActive || searchApplies)
+                    {
+                        var recipe = slot.Recipe;
+                        if (recipe?.Outcome == null) continue;
+
+                        if (searchApplies)
+                        {
+                            var name = recipe.OutcomeName() ?? string.Empty;
+                            if (name.IndexOf(FilterState.SearchText, StringComparison.OrdinalIgnoreCase) < 0)
+                                continue;
+                        }
+                        if (itemFilterActive && !FilterState.ItemFilter.Matches(recipe.Outcome))
+                            continue;
+                    }
+                    rcm._models.Add(slot);
+                }
+
+                rcm.Resize();
+                rcm.SetDirty();
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"[BetterSorting] sort/filter postfix failed: {e.GetBaseException().Message}");
             }
         }
     }
@@ -370,44 +471,19 @@ namespace BetterSortingCrafting
         }
     }
 
-    // Apply our search + weapon-subtype filter on top of the tab's existing
-    // CurrentType.Contains predicate.
-    [HarmonyPatch(typeof(RecipeGridUI), nameof(RecipeGridUI.AllRecipesOfCurrentType), MethodType.Getter)]
-    internal static class RecipeGridUI_AllRecipesOfCurrentType_Patch
+    // While the user has the search bar focused, suppress the game's keyboard
+    // and registered-input handlers so typing letters into the field doesn't
+    // fire hotkeys. Mirrors BetterUI's pattern for VItemsDefaultUI search.
+    [HarmonyPatch(typeof(Awaken.TG.Main.Heroes.PlayerInput), "HandleKeyboard")]
+    internal static class PlayerInput_HandleKeyboard_Patch
     {
-        static void Postfix(RecipeGridUI __instance, ref IEnumerable<IRecipe> __result)
-        {
-            try
-            {
-                if (FilterState.ActiveGrid != __instance) return;
+        static bool Prefix() => !SearchBar.IsFocused && !InventorySearchBar.IsFocused;
+    }
 
-                bool weaponApplies = FilterState.WeaponFilter != WeaponSubFilter.All
-                    && VCRecipeSorting_OnAttach_Patch.IsWeaponishTab(__instance.CurrentType);
-
-                bool searchApplies = !string.IsNullOrEmpty(FilterState.SearchText);
-
-                if (!weaponApplies && !searchApplies) return;
-
-                var inner = __result;
-                __result = inner.Where(r =>
-                {
-                    if (r?.Outcome == null) return false;
-                    if (searchApplies)
-                    {
-                        var name = r.OutcomeName() ?? string.Empty;
-                        if (name.IndexOf(FilterState.SearchText, StringComparison.OrdinalIgnoreCase) < 0)
-                            return false;
-                    }
-                    if (weaponApplies && !FilterState.WeaponFilter.Matches(r.Outcome))
-                        return false;
-                    return true;
-                });
-            }
-            catch (Exception e)
-            {
-                Plugin.Log.LogError($"[BetterSorting] filter postfix failed: {e.GetBaseException().Message}");
-            }
-        }
+    [HarmonyPatch(typeof(Awaken.TG.Main.Heroes.PlayerInput), "HandleRegisteredPlayerInputs")]
+    internal static class PlayerInput_HandleRegistered_Patch
+    {
+        static bool Prefix() => !SearchBar.IsFocused && !InventorySearchBar.IsFocused;
     }
 
     [HarmonyPatch(typeof(RecipeGridUI), "OnFullyInitialized")]
@@ -419,5 +495,4 @@ namespace BetterSortingCrafting
             FilterState.Reset();
         }
     }
-
 }
