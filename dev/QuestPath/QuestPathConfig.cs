@@ -12,6 +12,7 @@ namespace QuestPath
         // Destination source priority
         public ConfigEntry<bool> UseCustomMarker { get; }
         public ConfigEntry<bool> UseTrackedQuest { get; }
+        public ConfigEntry<bool> RevealHiddenMarkers { get; }
 
         // Pathfinding
         public ConfigEntry<float> RecalcInterval { get; }
@@ -70,6 +71,9 @@ namespace QuestPath
             UseTrackedQuest = cfg.Bind(
                 "2. Destination", "UseTrackedQuest", true,
                 "Fallback to the player's currently-tracked quest objective when no custom marker is set. Works even for objectives whose map icon is hidden — we read the underlying target coords directly.");
+            RevealHiddenMarkers = cfg.Bind(
+                "2. Destination", "RevealHiddenMarkers", true,
+                "Bypass the game's marker-visibility gate. Some quests deliberately hide their target until you've progressed dialogue (e.g. 'find the quarantined house'); the coords exist in the data but are normally suppressed. With this on, we read those coords anyway. Tradeoff: removes some intended discovery — flip off if you want vanilla pacing.");
 
             RecalcInterval = cfg.Bind(
                 "3. Pathfinding", "RecalcInterval", 1.0f,

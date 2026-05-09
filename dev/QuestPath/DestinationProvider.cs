@@ -21,6 +21,8 @@ namespace QuestPath
         private static Type _questType;
         private static Type _worldType;
         private static Type _questTrackerType;
+        private static Type _markerDataType;            // Objective+MarkerData (nested struct)
+        private static Type _locationReferenceType;     // Awaken.TG.Main.Locations.LocationReference
 
         // Public entry point. Returns the current destination world coords + a tag describing source,
         // or (null, null) if neither source has a usable target.
@@ -56,6 +58,8 @@ namespace QuestPath
             _questType = ResolveType("Awaken.TG.Main.Stories.Quests.Quest");
             _worldType = ResolveType("Awaken.TG.MVC.World");
             _questTrackerType = ResolveType("Awaken.TG.Main.Stories.Quests.QuestTracker");
+            _locationReferenceType = ResolveType("Awaken.TG.Main.Locations.LocationReference");
+            _markerDataType = ResolveType("Awaken.TG.Main.Stories.Quests.Objectives.Objective+MarkerData");
         }
 
         private static Vector3? TryGetCompassCustomMarkerCoords(object hero)
@@ -87,31 +91,59 @@ namespace QuestPath
             return null;
         }
 
+        // One-shot diagnostic flags — log a given trace line at most once until the relevant
+        // input changes. Without this, every Update tick floods the log.
+        private static string _lastLoggedQuestName;
+        private static int _lastLoggedObjectiveCount = -1;
+
         private static Vector3? TryGetTrackedQuestObjectiveCoords(object hero)
         {
             try
             {
-                if (_questTrackerType == null) return null;
+                if (_questTrackerType == null) { Plugin.Log.LogWarning("[QuestPath] _questTrackerType is null"); return null; }
 
                 // Tracked quest lives at Hero.Element<QuestTracker>().ActiveQuest — NOT in
                 // World.All<Quest>() (the global model registry doesn't index it).
                 var elementGeneric = hero.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(m => m.Name == "Element" && m.IsGenericMethod && m.GetParameters().Length == 0);
                 var tracker = elementGeneric?.MakeGenericMethod(_questTrackerType).Invoke(hero, null);
-                if (tracker == null) return null;
+                if (tracker == null) { LogOnce(ref _lastLoggedQuestName, "<no-tracker>", "[QuestPath] no QuestTracker on hero"); return null; }
 
                 var activeQuest = _questTrackerType.GetProperty("ActiveQuest")?.GetValue(tracker);
-                if (activeQuest == null) return null;
+                if (activeQuest == null) { LogOnce(ref _lastLoggedQuestName, "<no-quest>", "[QuestPath] no ActiveQuest tracked — pin a quest in the journal"); return null; }
 
-                if (Plugin.Cfg.Verbose.Value)
-                    Plugin.Log.LogInfo($"[QuestPath] tracked active quest: '{activeQuest.GetType().GetProperty("DisplayName")?.GetValue(activeQuest)}'");
+                var displayName = activeQuest.GetType().GetProperty("DisplayName")?.GetValue(activeQuest)?.ToString() ?? "<unnamed>";
+                LogOnce(ref _lastLoggedQuestName, displayName, $"[QuestPath] tracked active quest: '{displayName}'");
 
                 var objsProp = activeQuest.GetType().GetProperty("ActiveObjectives") ?? activeQuest.GetType().GetProperty("Objectives");
                 var objs = (objsProp?.GetValue(activeQuest) as System.Collections.IEnumerable)?.Cast<object>().ToList();
-                if (objs == null || objs.Count == 0) return null;
+                if (objs == null || objs.Count == 0)
+                {
+                    LogOnceCount(ref _lastLoggedObjectiveCount, 0, "[QuestPath] active quest has 0 objectives");
+                    return null;
+                }
+                LogOnceCount(ref _lastLoggedObjectiveCount, objs.Count, $"[QuestPath] active quest has {objs.Count} objective(s)");
 
                 foreach (var objective in objs)
                 {
+                    // Step A (preferred when RevealHiddenMarkers=true):
+                    // Iterate Objective.MarkersData[] ourselves and call MarkerData.LocationReference
+                    // .MatchingLocations(null) directly. The vanilla GetAllActiveTargets() filters by
+                    // MarkerData.MarkerVisible, which gates targets behind story flags
+                    // (e.g. 'find the quarantined house' is invisible until you've talked to NPC X).
+                    // We don't care about that gate — the coords exist, surface them.
+                    if (Plugin.Cfg.RevealHiddenMarkers.Value)
+                    {
+                        var bypassed = TryGetMarkerBypassCoords(objective);
+                        if (bypassed.HasValue)
+                        {
+                            if (Plugin.Cfg.Verbose.Value)
+                                Plugin.Log.LogInfo($"[QuestPath] resolved target via marker-bypass: {bypassed.Value}");
+                            return bypassed;
+                        }
+                    }
+
+                    // Step B (fallback): vanilla GetAllActiveTargets — respects MarkerVisible gate.
                     // Objective.GetAllActiveTargets(IGrounded, SceneReference) → List<IGrounded>
                     //
                     // IMPORTANT: passing null as the SceneReference returns a fallback that can
@@ -158,6 +190,89 @@ namespace QuestPath
                 if (Plugin.Cfg.Verbose.Value) Plugin.Log.LogWarning($"[QuestPath] tracked-quest resolve failed: {e.Message}");
             }
             return null;
+        }
+
+        // Read Objective.MarkersData[], grab each MarkerData.LocationReference, and resolve
+        // matching loaded Locations directly via LocationReference.MatchingLocations(null).
+        // This skips the MarkerVisible / RelatedStoryFlag gate that the vanilla GetAllActiveTargets
+        // applies. Returns the first non-sentinel coord found, or null.
+        //
+        // Caveat: only finds targets in the currently-loaded scene set. If the location isn't
+        // streamed in (target is in another region), no Location matches and we get null —
+        // that's fine, the caller falls through to the vanilla path which can route to a portal.
+        private static string _lastLoggedBypassObjective;
+
+        private static Vector3? TryGetMarkerBypassCoords(object objective)
+        {
+            var objName = objective.GetType().GetProperty("Name")?.GetValue(objective)?.ToString() ?? "<unnamed>";
+            try
+            {
+                var markersProp = objective.GetType().GetProperty("MarkersData");
+                if (markersProp == null) { LogOnce(ref _lastLoggedBypassObjective, objName + ":no-markersdata", $"[QuestPath:bypass] '{objName}' has no MarkersData property"); return null; }
+                var markersArr = markersProp.GetValue(objective) as Array;
+                if (markersArr == null || markersArr.Length == 0) { LogOnce(ref _lastLoggedBypassObjective, objName + ":empty", $"[QuestPath:bypass] '{objName}' has 0 markers"); return null; }
+
+                if (_markerDataType == null) { Plugin.Log.LogWarning("[QuestPath:bypass] _markerDataType lookup failed (Objective+MarkerData)"); return null; }
+                if (_locationReferenceType == null) { Plugin.Log.LogWarning("[QuestPath:bypass] _locationReferenceType lookup failed"); return null; }
+                var locRefProp = _markerDataType.GetProperty("LocationReference");
+                var matchingM = _locationReferenceType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.Name == "MatchingLocations" && m.GetParameters().Length == 1);
+                if (locRefProp == null || matchingM == null) { Plugin.Log.LogWarning("[QuestPath:bypass] LocationReference / MatchingLocations not resolvable"); return null; }
+
+                int totalMatches = 0;
+                for (int i = 0; i < markersArr.Length; i++)
+                {
+                    var marker = markersArr.GetValue(i);
+                    if (marker == null) continue;
+                    var locRef = locRefProp.GetValue(marker);
+                    if (locRef == null) continue;
+
+                    object matches;
+                    try { matches = matchingM.Invoke(locRef, new object[] { null }); }
+                    catch (Exception e)
+                    {
+                        Plugin.Log.LogInfo($"[QuestPath:bypass] MatchingLocations threw on marker[{i}] of '{objName}': {(e.InnerException ?? e).Message}");
+                        continue;
+                    }
+
+                    if (matches is System.Collections.IEnumerable list)
+                    {
+                        int matchCount = 0;
+                        foreach (var loc in list)
+                        {
+                            matchCount++; totalMatches++;
+                            var coords = TryGetCoords(loc);
+                            if (coords.HasValue)
+                            {
+                                Plugin.Log.LogInfo($"[QuestPath:bypass] HIT '{objName}' marker[{i}] → loc {loc?.GetType().Name} @ {coords.Value}");
+                                return coords;
+                            }
+                        }
+                        if (matchCount == 0)
+                            LogOnce(ref _lastLoggedBypassObjective, objName + $":m{i}:0", $"[QuestPath:bypass] '{objName}' marker[{i}] matched 0 loaded locations (target scene not streamed?)");
+                    }
+                }
+                LogOnce(ref _lastLoggedBypassObjective, objName + ":nohit:" + totalMatches, $"[QuestPath:bypass] '{objName}' had {markersArr.Length} marker(s) but no usable coords (totalMatched={totalMatches})");
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning($"[QuestPath:bypass] marker-bypass failed on '{objName}': {e.Message}");
+            }
+            return null;
+        }
+
+        // Log a string-keyed message once per distinct key. Resets only when key changes.
+        private static void LogOnce(ref string slot, string key, string msg)
+        {
+            if (slot == key) return;
+            slot = key;
+            Plugin.Log.LogInfo(msg);
+        }
+        private static void LogOnceCount(ref int slot, int key, string msg)
+        {
+            if (slot == key) return;
+            slot = key;
+            Plugin.Log.LogInfo(msg);
         }
 
         // Pulls a Vector3 out of any IGrounded / Location / model with a Coords / Position property.
