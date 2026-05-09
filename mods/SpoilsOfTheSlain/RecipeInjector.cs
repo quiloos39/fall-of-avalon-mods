@@ -113,6 +113,8 @@ namespace SpoilsOfTheSlain
                     {
                         if (t.IsWeapon || t.IsArmor || t.IsShield || t.IsRanged || t.IsArrow || t.IsJewelry)
                             return true;
+                        if (Plugin.Cfg.IncludeRelics.Value && t.IsGem)
+                            return true;
                     } catch { }
                     return false;
 

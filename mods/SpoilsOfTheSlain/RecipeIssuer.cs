@@ -72,6 +72,11 @@ namespace SpoilsOfTheSlain
                 if (Plugin.Cfg.InjectIntoForge.Value
                     && (t.IsWeapon || t.IsArmor || t.IsShield || t.IsRanged || t.IsArrow || t.IsJewelry))
                     return RecipeFactory.Station.Forge;
+
+                // Relics ("gems" in code, "Relics" in UI) have no vanilla recipes — route them to
+                // the forge so the player can re-craft any relic they've discovered.
+                if (Plugin.Cfg.InjectIntoForge.Value && Plugin.Cfg.IncludeRelics.Value && t.IsGem)
+                    return RecipeFactory.Station.Forge;
             }
             catch { }
 

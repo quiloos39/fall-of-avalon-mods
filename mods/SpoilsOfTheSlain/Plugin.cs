@@ -11,7 +11,7 @@ namespace SpoilsOfTheSlain
     {
         public const string PluginGuid = "com.user.spoilsoftheslain";
         public const string PluginName = "Spoils of the Slain";
-        public const string PluginVersion = "0.10.0";
+        public const string PluginVersion = "0.12.0";
 
         internal static ManualLogSource Log;
         internal static SpoilsOfTheSlainConfig Cfg;
@@ -47,7 +47,8 @@ namespace SpoilsOfTheSlain
                     }
                 }
                 Log.LogInfo($"{PluginName} loaded. {ok} patches installed, {fail} failed. " +
-                            $"Stations: forge={Cfg.InjectIntoForge.Value} alchemy={Cfg.InjectIntoAlchemy.Value} cooking={Cfg.InjectIntoCooking.Value}");
+                            $"Stations: forge={Cfg.InjectIntoForge.Value} alchemy={Cfg.InjectIntoAlchemy.Value} cooking={Cfg.InjectIntoCooking.Value} relics={Cfg.IncludeRelics.Value}. " +
+                            $"Triggers: dialogue={Cfg.UnlockOnDialogue.Value} backfillNearbyNpcs={Cfg.BackfillFromLoadedNpcs.Value}");
                 VerifyPatches();
             }
             catch (System.Exception e)

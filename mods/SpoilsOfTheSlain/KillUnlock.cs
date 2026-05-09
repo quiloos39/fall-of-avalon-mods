@@ -34,22 +34,27 @@ namespace SpoilsOfTheSlain
 
     internal static class KillUnlock
     {
-        public static void UnlockFromNpc(NpcElement npc)
+        // Unlock every item in the NPC's loot/inventory pool. Used by:
+        //   - kill hook (announce=true, source="killed")
+        //   - dialogue hook (announce=Cfg.NotifyOnDialogueUnlock, source="talked to")
+        //   - startup loaded-NPC backfill (announce=false, source="nearby")
+        // Returns the number of items newly added to KnownItems (for logging by the caller).
+        public static int UnlockFromNpc(NpcElement npc, bool announce = true, string source = "killed")
         {
-            if (npc == null) return;
-            if (!Catalog.IsBuilt) return;     // backfill hasn't completed yet — skip
+            if (npc == null) return 0;
+            if (!Catalog.IsBuilt) return 0;     // backfill hasn't completed yet — skip
 
             var template = npc.Template as NpcTemplate;
-            if (template == null) return;
+            if (template == null) return 0;
             var name = template.name;
-            if (string.IsNullOrEmpty(name)) return;
-            if (!Catalog.NpcLootPools.TryGetValue(name, out var pool)) return;
+            if (string.IsNullOrEmpty(name)) return 0;
+            if (!Catalog.NpcLootPools.TryGetValue(name, out var pool)) return 0;
 
             var hero = Hero.Current;
             var heroItems = hero?.Element<HeroItems>();
-            if (heroItems == null) return;
+            if (heroItems == null) return 0;
             var known = heroItems.KnownItems;
-            if (known == null) return;
+            if (known == null) return 0;
 
             int unlocked = 0;
             foreach (var guid in pool)
@@ -59,11 +64,12 @@ namespace SpoilsOfTheSlain
                 int before = known.Count;
                 heroItems.AddToKnownItems(item);
                 if (known.Count > before) unlocked++;
-                RecipeIssuer.Issue(item, announce: true);
+                RecipeIssuer.Issue(item, announce: announce);
             }
 
             if (unlocked > 0 && Plugin.Cfg.LogDiscoveryGrowth.Value)
-                Plugin.Log.LogInfo($"[KillUnlock] '{name}' killed → +{unlocked} items unlocked.");
+                Plugin.Log.LogInfo($"[KillUnlock] '{name}' {source} → +{unlocked} items unlocked.");
+            return unlocked;
         }
     }
 }

@@ -15,6 +15,12 @@ namespace SpoilsOfTheSlain
         public ConfigEntry<bool> InjectIntoForge { get; }
         public ConfigEntry<bool> InjectIntoAlchemy { get; }
         public ConfigEntry<bool> InjectIntoCooking { get; }
+        public ConfigEntry<bool> IncludeRelics { get; }
+
+        // Dialogue unlock — talking to an NPC unlocks their loot pool the same way killing does
+        public ConfigEntry<bool> UnlockOnDialogue { get; }
+        public ConfigEntry<bool> NotifyOnDialogueUnlock { get; }
+        public ConfigEntry<bool> BackfillFromLoadedNpcs { get; }
 
         // Cost tuning
         public ConfigEntry<int> BaseGoldCost { get; }
@@ -64,6 +70,28 @@ namespace SpoilsOfTheSlain
             InjectIntoCooking = cfg.Bind(
                 "3. Recipes", "InjectIntoCooking", false,
                 "Add a recipe for every discovered food at cooking stations. Off by default — cooking has experimental flow that may conflict.");
+
+            IncludeRelics = cfg.Bind(
+                "3. Recipes", "IncludeRelics", true,
+                "Add a recipe for every discovered relic (gem) at the forge. Vanilla has no relic recipes, " +
+                "so ingredient cost falls back to a similar-tier vanilla forge recipe. Requires InjectIntoForge.");
+
+            UnlockOnDialogue = cfg.Bind(
+                "3. Recipes", "UnlockOnDialogue", true,
+                "When you start a dialogue with an NPC, unlock their loot/inventory pool the same way killing them does. " +
+                "Useful for vendors (you already see their wares) and quest NPCs you can't or won't kill.");
+
+            NotifyOnDialogueUnlock = cfg.Bind(
+                "3. Recipes", "NotifyOnDialogueUnlock", false,
+                "Pop the recipe-learned notification per item when dialogue triggers an unlock. " +
+                "Off by default — vendor inventories can produce 100+ popups in one conversation.");
+
+            BackfillFromLoadedNpcs = cfg.Bind(
+                "3. Recipes", "BackfillFromLoadedNpcs", true,
+                "On first save load, walk all NPCs currently in the loaded scene and unlock their loot pools. " +
+                "The game has no global 'NPCs I've talked to' registry, so this is a coarse approximation — " +
+                "it catches NPCs in your current zone but misses NPCs in zones you've left. " +
+                "Future dialogues fill the rest naturally as you revisit places.");
 
             BaseGoldCost = cfg.Bind(
                 "4. Cost", "BaseGoldCost", 50,
