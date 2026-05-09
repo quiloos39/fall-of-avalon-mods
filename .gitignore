@@ -15,6 +15,9 @@ assets/
 dev/DialogExporter/exports/
 dev/DialogExporter/exports_split/
 
+# BuildAdvisor research probe — local-only, not tracked
+dev/BuildAdvisor/
+
 # Release artefacts
 *.zip
 *.rar
